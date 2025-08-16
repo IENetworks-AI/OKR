@@ -1,0 +1,179 @@
+# Development Environment Configuration for OKR Project
+
+# Database Configuration
+database:
+  host: localhost
+  port: 5432
+  name: okr_dev
+  user: okr_dev_user
+  password: dev_password_123
+  pool_size: 5
+  max_overflow: 10
+  echo: true  # SQL query logging
+
+# Redis Configuration
+redis:
+  host: localhost
+  port: 6379
+  db: 0
+  password: null
+  max_connections: 10
+
+# Kafka Configuration
+kafka:
+  bootstrap_servers:
+    - localhost:9092
+  topic_prefix: "okr_dev_"
+  auto_offset_reset: "earliest"
+  group_id: "okr_dev_group"
+  topics:
+    ai_predictions: "okr_dev_ai_predictions"
+    system_metrics: "okr_dev_system_metrics"
+    user_events: "okr_dev_user_events"
+    data_pipeline: "okr_dev_data_pipeline"
+
+# Airflow Configuration
+airflow:
+  home: "./airflow"
+  dags_folder: "./data/airflow_dags"
+  executor: "LocalExecutor"
+  web_server_port: 8080
+  scheduler_heartbeat_sec: 5
+  dag_dir_list_interval: 300
+
+# AI/ML Configuration
+ai:
+  model_registry_path: "./ai/models"
+  default_model_name: "default_v1"
+  inference_batch_size: 32
+  max_sequence_length: 512
+  cache_predictions: true
+  model_timeout: 30  # seconds
+
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  debug: true
+  reload: true
+  workers: 1
+  log_level: "debug"
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+    - "http://127.0.0.1:3000"
+
+# Logging Configuration
+logging:
+  level: "DEBUG"
+  format: "json"
+  file_rotation: true
+  max_file_size: "10MB"
+  backup_count: 5
+  console_output: true
+  file_output: true
+  log_directory: "./logs"
+
+# Monitoring Configuration
+monitoring:
+  prometheus_port: 9090
+  grafana_port: 3000
+  health_check_interval: 30  # seconds
+  metrics_collection_interval: 10  # seconds
+  alert_thresholds:
+    cpu_usage: 80  # percentage
+    memory_usage: 85  # percentage
+    disk_usage: 90  # percentage
+    api_error_rate: 5  # percentage
+
+# Data Processing Configuration
+data_processing:
+  batch_size: 1000
+  max_workers: 4
+  chunk_size: 10000
+  temp_directory: "/tmp/okr_processing"
+  cleanup_temp_files: true
+  validation_enabled: true
+  quality_checks:
+    completeness_threshold: 0.95
+    accuracy_threshold: 0.98
+
+# Testing Configuration
+testing:
+  database_url: "postgresql://test_user:test_pass@localhost:5432/okr_test"
+  test_data_path: "./tests/data"
+  mock_external_apis: true
+  parallel_tests: true
+  coverage_threshold: 80  # percentage
+
+# Security Configuration
+security:
+  secret_key: "dev-secret-key-change-in-production"
+  algorithm: "HS256"
+  access_token_expire_minutes: 30
+  refresh_token_expire_days: 7
+  password_min_length: 8
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 100
+    burst_size: 10
+
+# Feature Flags
+features:
+  enable_model_caching: true
+  enable_real_time_predictions: true
+  enable_batch_processing: true
+  enable_data_validation: true
+  enable_performance_monitoring: true
+  enable_advanced_logging: true
+
+# External Services (Development/Mock)
+external_services:
+  openai_api:
+    base_url: "https://api.openai.com/v1"
+    timeout: 30
+    max_retries: 3
+  
+  huggingface_api:
+    base_url: "https://api-inference.huggingface.co"
+    timeout: 60
+    max_retries: 2
+
+# Development Tools
+development:
+  auto_reload: true
+  debug_toolbar: true
+  profiling_enabled: true
+  hot_reload_templates: true
+  verbose_logging: true
+  mock_slow_operations: false
+
+# Data Sources
+data_sources:
+  user_data:
+    type: "postgresql"
+    connection: "primary_db"
+    table: "users"
+    
+  okr_data:
+    type: "postgresql"
+    connection: "primary_db"
+    table: "okrs"
+    
+  system_metrics:
+    type: "kafka"
+    topic: "okr_dev_system_metrics"
+    
+  external_api:
+    type: "rest_api"
+    base_url: "https://api.example.com"
+    timeout: 30
+
+# Scheduler Configuration
+scheduler:
+  timezone: "UTC"
+  default_dag_run_timeout: 3600  # 1 hour
+  default_task_retries: 2
+  default_retry_delay: 300  # 5 minutes
+  catchup_by_default: false
+  max_active_runs_per_dag: 1
