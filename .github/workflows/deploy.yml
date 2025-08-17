@@ -1,15 +1,16 @@
-
 name: ci-deploy
 on:
   push:
     branches: [ main ]
+
 jobs:
   train:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: '3.10' }
+        with:
+          python-version: '3.10'
       - run: echo "train stub"
       - uses: actions/upload-artifact@v4
         with:
@@ -22,27 +23,32 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
+
       - name: Download models and results
         uses: actions/download-artifact@v4
         with:
           name: models-and-results-${{ github.sha }}
           path: models/
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      - name: Install dependencies
+
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt || true
+
       - name: Check Oracle Deployment Configuration
         id: check-deployment
         run: |
-          if [ -n "${{ secrets.ORACLE_SSH_KEY }}" ]; then
-            echo "oracle_deploy=true" >> $GITHUB_OUTPUT
+          if [ -z "${{ secrets.ORACLE_SSH_KEY }}" ] || [ -z "${{ secrets.ORACLE_HOST }}" ] || [ -z "${{ secrets.ORACLE_USER }}" ]; then
+            echo "ERROR: Missing required Oracle secrets!"
+            exit 1
           else
-            echo "oracle_deploy=false" >> $GITHUB_OUTPUT
-          fi
+            echo "oracle_deploy=true" >> $GITHUB_OUTPUT
+
       - name: Setup SSH
         if: steps.check-deployment.outputs.oracle_deploy == 'true'
         run: |
@@ -50,7 +56,75 @@ jobs:
           echo "${{ secrets.ORACLE_SSH_KEY }}" > ~/.ssh/oracle.key
           chmod 600 ~/.ssh/oracle.key
           ssh-keyscan -H ${{ secrets.ORACLE_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Create dedicated project folder on Oracle
+        if: steps.check-deployment.outputs.oracle_deploy == 'true'
+        run: |
+          ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} \
+            "mkdir -p ~/okr-project && echo '✅ Dedicated folder ~/okr-project ready'"
+
       - name: Deploy Code to Oracle
         if: steps.check-deployment.outputs.oracle_deploy == 'true'
         run: |
-          rsync -avz --delete -e "ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no" ./ ubuntu@${{ secrets.ORACLE_HOST }}:/home/ubuntu/ai-project-template/
+          rsync -avz --delete -e "ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no" ./ ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }}:/home/${{ secrets.ORACLE_USER }}/okr-project/
+
+      - name: Install system dependencies on Oracle
+        if: steps.check-deployment.outputs.oracle_deploy == 'true'
+        run: |
+          ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} << 'EOF'
+            sudo apt-get update -qq
+            sudo apt-get install -y python3-venv python3-pip nginx default-jdk curl wget unzip rsync git
+            echo "✅ System dependencies installed"
+          EOF
+
+      - name: Set up Python environment and install project dependencies
+        if: steps.check-deployment.outputs.oracle_deploy == 'true'
+        run: |
+          ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} << 'EOF'
+            cd ~/okr-project
+            if [ ! -d "venv" ]; then
+              python3 -m venv venv
+            fi
+            source venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt || true
+            pip install flask kafka-python apache-airflow
+            echo "✅ Python environment ready"
+          EOF
+
+      - name: Start Flask, Kafka, and Airflow services
+        if: steps.check-deployment.outputs.oracle_deploy == 'true'
+        run: |
+          ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} << 'EOF'
+            cd ~/okr-project
+            source venv/bin/activate
+
+            # Flask API (example with systemd)
+            sudo tee /etc/systemd/system/mlapi.service > /dev/null << SERVICE_EOF
+            [Unit]
+            Description=ML API Service
+            After=network.target
+
+            [Service]
+            Type=simple
+            WorkingDirectory=/home/ubuntu/okr-project
+            ExecStart=/home/ubuntu/okr-project/venv/bin/python app.py
+            Restart=always
+            RestartSec=10
+            Environment=PATH=/home/ubuntu/okr-project/venv/bin
+            SERVICE_EOF
+            sudo systemctl daemon-reload
+            sudo systemctl enable mlapi.service
+            sudo systemctl start mlapi.service
+
+            # Airflow (example simple init)
+            export AIRFLOW_HOME=~/okr-project/airflow
+            mkdir -p $AIRFLOW_HOME
+            airflow db init
+            airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com
+
+            # Start Nginx
+            sudo systemctl enable nginx
+            sudo systemctl restart nginx
+            echo "✅ Services started (Flask, Airflow, Nginx)"
+          EOF
