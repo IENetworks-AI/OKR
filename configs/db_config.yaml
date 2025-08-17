@@ -1,0 +1,4 @@
+raw_dir: data/raw
+processed_dir: data/processed
+registry_dir: ml_pipeline/registry
+metrics_dir: monitoring/model_metrics
