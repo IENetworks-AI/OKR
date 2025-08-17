@@ -98,5 +98,80 @@ def test_predict():
         year=datetime.datetime.now().year
     )
 
+# OKR API endpoints
+@app.get("/api/okrs")
+def get_okrs():
+    """Get all OKR data"""
+    try:
+        # Try to load from data file
+        data_file = 'data/raw/sample_okr_data.json'
+        if os.path.exists(data_file):
+            with open(data_file, 'r') as f:
+                okr_data = json.load(f)
+            return jsonify(okr_data)
+        else:
+            # Return empty array if no data file
+            return jsonify([])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post("/api/generate-sample-data")
+def generate_sample_data():
+    """Generate sample OKR data"""
+    try:
+        # Run the sample data generator script
+        import subprocess
+        result = subprocess.run(['python3', 'scripts/generate_sample_data.py'], 
+                              capture_output=True, text=True, cwd='..')
+        
+        if result.returncode == 0:
+            return jsonify({"message": "Sample data generated successfully", "output": result.stdout})
+        else:
+            return jsonify({"error": "Failed to generate sample data", "stderr": result.stderr}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.get("/api/test-kafka")
+def test_kafka():
+    """Test Kafka connection"""
+    try:
+        # Check if Kafka is running
+        import subprocess
+        result = subprocess.run(['curl', '-s', 'localhost:9092'], 
+                              capture_output=True, text=True, timeout=5)
+        
+        if result.returncode == 0:
+            return jsonify({"message": "Kafka is running", "status": "healthy"})
+        else:
+            return jsonify({"message": "Kafka is not responding", "status": "unhealthy"})
+    except Exception as e:
+        return jsonify({"message": f"Kafka test failed: {str(e)}", "status": "error"})
+
+@app.get("/api/test-airflow")
+def test_airflow():
+    """Test Airflow connection"""
+    try:
+        # Check if Airflow is running
+        import subprocess
+        result = subprocess.run(['curl', '-s', 'localhost:8080'], 
+                              capture_output=True, text=True, timeout=5)
+        
+        if result.returncode == 0:
+            return jsonify({"message": "Airflow is running", "status": "healthy"})
+        else:
+            return jsonify({"message": "Airflow is not responding", "status": "unhealthy"})
+    except Exception as e:
+        return jsonify({"message": f"Airflow test failed: {str(e)}", "status": "error"})
+
+@app.get("/dashboard")
+def dashboard():
+    """OKR Dashboard"""
+    try:
+        with open('dashboard.html', 'r') as f:
+            dashboard_content = f.read()
+        return dashboard_content
+    except FileNotFoundError:
+        return "Dashboard not found", 404
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

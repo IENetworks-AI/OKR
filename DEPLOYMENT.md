@@ -39,8 +39,8 @@ To enable automatic deployment to Oracle Cloud, configure these secrets in your 
 | Secret Name | Description | Example |
 |-------------|-------------|---------|
 | `ORACLE_SSH_KEY` | Private SSH key for Oracle instance | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
-| `ORACLE_HOST` | Public IP address of Oracle instance | `123.45.67.89` |
-| `ORACLE_USER` | Username for SSH access | `ubuntu` |
+
+**Note**: The current configuration uses a hardcoded Oracle instance IP (`139.185.33.139`) and username (`ubuntu`). For production use, consider making these configurable via secrets.
 
 ### How to Generate SSH Key
 
@@ -60,10 +60,22 @@ cat ~/.ssh/id_rsa
 When you push to the `main` branch, the GitHub Actions workflow will:
 
 1. **Check for Oracle secrets** - If missing, deployment is skipped gracefully
-2. **Deploy code** - Sync project files to Oracle instance
-3. **Install dependencies** - System packages, Python, and project requirements
-4. **Configure services** - Set up Flask API, Airflow, and Nginx
-5. **Start services** - Enable and start all services
+2. **Setup SSH connection** - Configure SSH key and test connection to Oracle instance
+3. **Install rsync** - Ensure rsync is available on both runner and Oracle server
+4. **Deploy code** - Sync project files to Oracle instance using rsync
+5. **Setup server environment** - Install dependencies, create virtual environment, configure systemd service
+6. **Start services** - Enable and start the ML API service
+
+### Current Working Configuration
+
+The deployment is currently configured for:
+- **Oracle Instance IP**: `139.185.33.139`
+- **Username**: `ubuntu`
+- **Project Directory**: `/home/ubuntu/ai-project-template`
+- **Service Name**: `mlapi.service`
+- **Port**: `5000`
+
+This configuration has been tested and works successfully in production.
 
 ### Manual Deployment
 
@@ -103,32 +115,43 @@ kubectl apply -f deploy/k8s/
 
 ### Common Issues
 
-1. **"Missing required Oracle secrets"**
-   - Configure the required GitHub secrets
-   - Or the deployment will be skipped gracefully
+1. **"Oracle deployment secrets not found - skipping deployment"**
+   - Configure the `ORACLE_SSH_KEY` secret in GitHub
+   - The deployment will be skipped gracefully if secrets are missing
 
 2. **SSH connection failed**
    - Verify the SSH key is correct
-   - Check firewall settings on Oracle instance
-   - Ensure the instance is accessible
+   - Check firewall settings on Oracle instance (port 22)
+   - Ensure the instance IP `139.185.33.139` is accessible
 
-3. **Service startup failed**
-   - Check logs: `sudo journalctl -u mlapi.service`
+3. **rsync installation failed**
+   - The workflow automatically handles apt locks and dpkg interruptions
+   - Check server logs for any remaining package manager issues
+
+4. **Service startup failed**
+   - Check logs: `sudo journalctl -u mlapi.service -f`
    - Verify Python environment: `source venv/bin/activate`
    - Check dependencies: `pip list`
+   - Verify the project directory exists: `ls -la ~/ai-project-template`
 
 ### Logs and Monitoring
 
 ```bash
-# Flask API logs
+# ML API service logs
 sudo journalctl -u mlapi.service -f
 
-# Airflow logs
-tail -f ~/okr-project/airflow/logs/
+# Service status
+sudo systemctl status mlapi.service
 
-# Nginx logs
-sudo tail -f /var/log/nginx/access.log
-sudo tail -f /var/log/nginx/error.log
+# Python environment
+source ~/ai-project-template/venv/bin/activate
+pip list
+
+# Project directory
+ls -la ~/ai-project-template/
+
+# SSH connection test
+ssh ubuntu@139.185.33.139 "echo 'Connection successful'"
 ```
 
 ## Security Considerations
