@@ -4,9 +4,14 @@ import os, yaml, joblib, datetime
 app = Flask(__name__)
 
 # Load config
-cfg = yaml.safe_load(open('configs/db_config.yaml'))
-MODEL_PATH = os.path.join(cfg['registry_dir'], 'model.pkl')
-model = joblib.load(MODEL_PATH) if os.path.exists(MODEL_PATH) else None
+try:
+    cfg = yaml.safe_load(open('../configs/db_config.yaml'))
+    MODEL_PATH = os.path.join(cfg['registry_dir'], 'model.pkl')
+    model = joblib.load(MODEL_PATH) if os.path.exists(MODEL_PATH) else None
+except Exception as e:
+    print(f"Warning: Could not load config: {e}")
+    MODEL_PATH = 'data/final/model.pkl'
+    model = None
 
 # --- Dashboard template ---
 dashboard_html = """
@@ -104,7 +109,7 @@ def get_okrs():
     """Get all OKR data"""
     try:
         # Try to load from data file
-        data_file = 'data/raw/sample_okr_data.json'
+        data_file = '../data/raw/sample_okr_data.json'
         if os.path.exists(data_file):
             with open(data_file, 'r') as f:
                 okr_data = json.load(f)
@@ -162,16 +167,6 @@ def test_airflow():
             return jsonify({"message": "Airflow is not responding", "status": "unhealthy"})
     except Exception as e:
         return jsonify({"message": f"Airflow test failed: {str(e)}", "status": "error"})
-
-@app.get("/dashboard")
-def dashboard():
-    """OKR Dashboard"""
-    try:
-        with open('dashboard.html', 'r') as f:
-            dashboard_content = f.read()
-        return dashboard_content
-    except FileNotFoundError:
-        return "Dashboard not found", 404
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
