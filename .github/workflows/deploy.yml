@@ -60,8 +60,10 @@ jobs:
       - name: Create dedicated project folder on Oracle
         if: steps.check-deployment.outputs.oracle_deploy == 'true'
         run: |
-          ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} \
-            "mkdir -p ~/okr-project && echo '✅ Dedicated folder ~/okr-project ready'"
+          ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} << 'EOF'
+          mkdir -p ~/okr-project
+          echo "✅ Dedicated folder ~/okr-project ready"
+          EOF
 
       - name: Deploy Code to Oracle
         if: steps.check-deployment.outputs.oracle_deploy == 'true'
@@ -72,59 +74,63 @@ jobs:
         if: steps.check-deployment.outputs.oracle_deploy == 'true'
         run: |
           ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} << 'EOF'
-            sudo apt-get update -qq
-            sudo apt-get install -y python3-venv python3-pip nginx default-jdk curl wget unzip rsync git
-            echo "✅ System dependencies installed"
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-venv python3-pip nginx default-jdk curl wget unzip rsync git
+          echo "✅ System dependencies installed"
           EOF
 
       - name: Set up Python environment and install project dependencies
         if: steps.check-deployment.outputs.oracle_deploy == 'true'
         run: |
           ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} << 'EOF'
-            cd ~/okr-project
-            if [ ! -d "venv" ]; then
-              python3 -m venv venv
-            fi
-            source venv/bin/activate
-            pip install --upgrade pip
-            pip install -r requirements.txt || true
-            pip install flask kafka-python apache-airflow
-            echo "✅ Python environment ready"
+          cd ~/okr-project
+          if [ ! -d "venv" ]; then
+            python3 -m venv venv
+          fi
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt || true
+          pip install flask kafka-python apache-airflow
+          echo "✅ Python environment ready"
           EOF
 
       - name: Start Flask, Kafka, and Airflow services
         if: steps.check-deployment.outputs.oracle_deploy == 'true'
         run: |
           ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} << 'EOF'
-            cd ~/okr-project
-            source venv/bin/activate
+          cd ~/okr-project
+          source venv/bin/activate
 
-            # Flask API (example with systemd)
-            sudo tee /etc/systemd/system/mlapi.service > /dev/null << SERVICE_EOF
-            [Unit]
-            Description=ML API Service
-            After=network.target
+          # Flask API (systemd)
+          sudo tee /etc/systemd/system/mlapi.service > /dev/null <<'SERVICE_EOF'
+          [Unit]
+          Description=ML API Service
+          After=network.target
 
-            [Service]
-            Type=simple
-            WorkingDirectory=/home/ubuntu/okr-project
-            ExecStart=/home/ubuntu/okr-project/venv/bin/python app.py
-            Restart=always
-            RestartSec=10
-            Environment=PATH=/home/ubuntu/okr-project/venv/bin
-            SERVICE_EOF
-            sudo systemctl daemon-reload
-            sudo systemctl enable mlapi.service
-            sudo systemctl start mlapi.service
+          [Service]
+          Type=simple
+          WorkingDirectory=/home/\${USER}/okr-project
+          ExecStart=/home/\${USER}/okr-project/venv/bin/python app.py
+          Restart=always
+          RestartSec=10
+          Environment=PATH=/home/\${USER}/okr-project/venv/bin
+          User=\${USER}
 
-            # Airflow (example simple init)
-            export AIRFLOW_HOME=~/okr-project/airflow
-            mkdir -p $AIRFLOW_HOME
-            airflow db init
-            airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com
+          [Install]
+          WantedBy=multi-user.target
+          SERVICE_EOF
+          sudo systemctl daemon-reload
+          sudo systemctl enable mlapi.service
+          sudo systemctl start mlapi.service
 
-            # Start Nginx
-            sudo systemctl enable nginx
-            sudo systemctl restart nginx
-            echo "✅ Services started (Flask, Airflow, Nginx)"
+          # Airflow initialization
+          export AIRFLOW_HOME=~/okr-project/airflow
+          mkdir -p \$AIRFLOW_HOME
+          airflow db init
+          airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com
+
+          # Start Nginx
+          sudo systemctl enable nginx
+          sudo systemctl restart nginx
+          echo "✅ Services started (Flask, Airflow, Nginx)"
           EOF
