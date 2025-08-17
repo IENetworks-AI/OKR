@@ -5,9 +5,27 @@ app = Flask(__name__)
 
 # Load config
 try:
-    cfg = yaml.safe_load(open('../configs/db_config.yaml'))
-    MODEL_PATH = os.path.join(cfg['registry_dir'], 'model.pkl')
-    model = joblib.load(MODEL_PATH) if os.path.exists(MODEL_PATH) else None
+    # Try multiple possible paths for config
+    config_paths = [
+        'configs/db_config.yaml',
+        '../configs/db_config.yaml',
+        '../../configs/db_config.yaml'
+    ]
+    
+    cfg = None
+    for path in config_paths:
+        if os.path.exists(path):
+            cfg = yaml.safe_load(open(path))
+            break
+    
+    if cfg:
+        MODEL_PATH = os.path.join(cfg['registry_dir'], 'model.pkl')
+        model = joblib.load(MODEL_PATH) if os.path.exists(MODEL_PATH) else None
+    else:
+        MODEL_PATH = 'data/final/model.pkl'
+        model = None
+        print("Warning: No config file found, using default paths")
+        
 except Exception as e:
     print(f"Warning: Could not load config: {e}")
     MODEL_PATH = 'data/final/model.pkl'
@@ -108,15 +126,21 @@ def test_predict():
 def get_okrs():
     """Get all OKR data"""
     try:
-        # Try to load from data file
-        data_file = '../data/raw/sample_okr_data.json'
-        if os.path.exists(data_file):
-            with open(data_file, 'r') as f:
-                okr_data = json.load(f)
-            return jsonify(okr_data)
-        else:
-            # Return empty array if no data file
-            return jsonify([])
+        # Try multiple possible paths for data file
+        data_paths = [
+            'data/raw/sample_okr_data.json',
+            '../data/raw/sample_okr_data.json',
+            '../../data/raw/sample_okr_data.json'
+        ]
+        
+        for data_file in data_paths:
+            if os.path.exists(data_file):
+                with open(data_file, 'r') as f:
+                    okr_data = json.load(f)
+                return jsonify(okr_data)
+        
+        # Return empty array if no data file found
+        return jsonify([])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -169,4 +193,16 @@ def test_airflow():
         return jsonify({"message": f"Airflow test failed: {str(e)}", "status": "error"})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='OKR Flask API')
+    parser.add_argument('--port', type=int, default=5001, help='Port to run the server on')
+    parser.add_argument('--host', type=str, default='0.0.0.0', help='Host to bind to')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    
+    args = parser.parse_args()
+    
+    print(f"🚀 Starting OKR API on {args.host}:{args.port}")
+    print(f"📊 Dashboard available at: http://{args.host}:{args.port}/dashboard")
+    
+    app.run(host=args.host, port=args.port, debug=args.debug)

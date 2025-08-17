@@ -193,7 +193,7 @@ jobs:
           Restart=always
           RestartSec=10
           Environment=PATH=/home/ubuntu/okr-project/venv/bin
-          Environment=PORT=5000
+          Environment=PORT=5001
           StandardOutput=journal
           StandardError=journal
 
