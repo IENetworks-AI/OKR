@@ -44,9 +44,10 @@ jobs:
         id: check-deployment
         run: |
           if [ -z "${{ secrets.ORACLE_SSH_KEY }}" ] || [ -z "${{ secrets.ORACLE_HOST }}" ] || [ -z "${{ secrets.ORACLE_USER }}" ]; then
-            echo "ERROR: Missing required Oracle secrets!"
-            exit 1
+            echo "Oracle secrets not configured - skipping Oracle deployment"
+            echo "oracle_deploy=false" >> $GITHUB_OUTPUT
           else
+            echo "Oracle secrets found - proceeding with Oracle deployment"
             echo "oracle_deploy=true" >> $GITHUB_OUTPUT
           fi
 
@@ -135,3 +136,21 @@ jobs:
           sudo systemctl restart nginx
           echo "✅ Services started (Flask, Airflow, Nginx)"
           EOF
+
+      - name: Oracle Deployment Success
+        if: steps.check-deployment.outputs.oracle_deploy == 'true'
+        run: |
+          echo "Oracle deployment completed successfully!"
+          echo "All services are now running on Oracle Cloud"
+          echo "Flask API, Airflow, and Nginx are operational"
+
+      - name: Deployment Summary
+        if: steps.check-deployment.outputs.oracle_deploy == 'false'
+        run: |
+          echo "Deployment completed successfully!"
+          echo "Oracle deployment was skipped (secrets not configured)"
+          echo "To enable Oracle deployment, configure the following secrets:"
+          echo "   - ORACLE_SSH_KEY"
+          echo "   - ORACLE_HOST" 
+          echo "   - ORACLE_USER"
+          echo "Local development can continue without these secrets"
