@@ -1,0 +1,148 @@
+version: "3.9"
+
+services:
+  # Flask API
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: okr_api
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./:/app
+    depends_on:
+      - kafka
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    networks:
+      - okr_net
+
+  # Nginx reverse proxy to API
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: okr_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx/mlapi.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - okr_net
+
+  # Kafka with KRaft mode (no Zookeeper)
+  kafka:
+    image: bitnami/kafka:3.6
+    container_name: okr_kafka
+    environment:
+      - KAFKA_ENABLE_KRAFT=yes
+      - KAFKA_CFG_PROCESS_ROLES=broker,controller
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@localhost:9093
+      - KAFKA_BROKER_ID=1
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    ports:
+      - "9092:9092"
+    restart: always
+    healthcheck:
+      test: ["CMD", "/opt/bitnami/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    networks:
+      - okr_net
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: okr_kafka_ui
+    ports:
+      - "8085:8080"
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=okr
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+    depends_on:
+      - kafka
+    restart: always
+    networks:
+      - okr_net
+
+  # Kafka demo producer
+  producer:
+    build:
+      context: .
+      dockerfile: kafka_pipeline/producers/Dockerfile
+    container_name: okr_producer
+    depends_on:
+      - kafka
+    restart: always
+    networks:
+      - okr_net
+
+  # Kafka demo consumer
+  consumer:
+    build:
+      context: .
+      dockerfile: kafka_pipeline/consumers/Dockerfile
+    container_name: okr_consumer
+    volumes:
+      - ./:/app
+    depends_on:
+      - kafka
+    restart: always
+    networks:
+      - okr_net
+
+  # Airflow (basic, using official image with local executor)
+  airflow:
+    image: apache/airflow:2.9.2
+    container_name: okr_airflow
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__FERNET_KEY=0123456789ABCDEF0123456789ABCDEF
+      - AIRFLOW__WEBSERVER__SECRET_KEY=supersecret
+    user: "50000:0"
+    volumes:
+      - ./airflow_dags/dags:/opt/airflow/dags
+    command: bash -c "airflow db init && airflow users create --username admin --firstname a --lastname b --role Admin --email admin@example.com --password admin || true && airflow webserver & airflow scheduler"
+    ports:
+      - "8080:8080"
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    networks:
+      - okr_net
+
+  # Oracle XE database
+  oracle:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: okr_oracle
+    environment:
+      - ORACLE_PASSWORD=oracle
+    ports:
+      - "1521:1521"
+      - "5500:5500"
+    restart: always
+    networks:
+      - okr_net
+
+networks:
+  okr_net:
+    driver: bridge
+

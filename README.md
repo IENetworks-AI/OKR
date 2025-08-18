@@ -49,6 +49,44 @@ OKR/
 
 ## 🛠️ Quick Start
 
+### Run Everything in Docker (recommended)
+
+1. Build images
+   ```bash
+   docker compose build
+   ```
+
+2. Start the full stack (always-restart policies enabled)
+   ```bash
+   docker compose up -d
+   ```
+
+3. Access services
+   - API: `http://localhost:5001/` and dashboard at `http://localhost:5001/dashboard`
+   - Nginx proxy to API: `http://localhost/`
+   - Kafka UI: `http://localhost:8085/`
+   - Airflow: `http://localhost:8080/` (admin/admin)
+   - Oracle XE: `SYSTEM/oracle@localhost:1521/XEPDB1`
+
+4. Validate health
+   ```bash
+   docker compose ps
+   docker compose logs -f --tail=100
+   curl http://localhost:5001/api/test-kafka
+   curl http://localhost:5001/api/test-airflow
+   ```
+
+5. Stop or remove
+   ```bash
+   docker compose stop      # stop containers
+   docker compose down      # remove containers
+   ```
+
+6. Optional: run producer/consumer again
+   ```bash
+   docker restart okr_producer okr_consumer
+   ```
+
 ### Local Development
 
 1. **Clone the repository**
