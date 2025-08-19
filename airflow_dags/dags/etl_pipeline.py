@@ -7,6 +7,7 @@ import json
 import yaml
 import pandas as pd
 
+# this is a commnt to check i all is well
 
 def extract():
     cfg = yaml.safe_load(open('configs/db_config.yaml'))
