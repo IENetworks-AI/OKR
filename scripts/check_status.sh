@@ -10,6 +10,8 @@ echo ""
 echo "📁 Project Structure:"
 ls -la
 
+``
+
 echo ""
 echo "🐍 Python Environment:"
 if [ -d "venv" ]; then
