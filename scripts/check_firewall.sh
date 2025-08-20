@@ -13,7 +13,7 @@ echo "📡 Network Interfaces:"
 ip addr show | grep -E "inet.*scope global" | head -5
 
 echo ""
-echo "🔌 Listening Ports:"
+echo "🔌 Listening Ports:    "
 netstat -tlnp 2>/dev/null | grep LISTEN | head -10
 
 echo ""
