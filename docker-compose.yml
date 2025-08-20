@@ -145,7 +145,7 @@ services:
     networks:
       - okr_net
 
-  # Oracle XE database
+  # Oracle XE database test
   oracle:
     image: gvenzl/oracle-xe:21-slim
     container_name: okr_oracle
