@@ -16,6 +16,8 @@ echo ""
 echo "🔌 Listening Ports:    "
 netstat -tlnp 2>/dev/null | grep LISTEN | head -10
 
+
+
 echo ""
 echo "🌍 External Connectivity Test:"
 echo "Testing outbound connections..."
