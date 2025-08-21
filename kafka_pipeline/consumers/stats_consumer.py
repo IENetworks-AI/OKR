@@ -1,4 +1,5 @@
-from kafka import KafkaConsumer, KafkaError
+from kafka import KafkaConsumer
+from kafka.errors import KafkaError
 import json
 import yaml
 import os

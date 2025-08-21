@@ -4,9 +4,14 @@ HOSTPORT="${1:-kafka:9092}"
 shift || true
 CMD=("$@")
 
-echo "Waiting for Kafka at ${HOSTPORT}..."
+# Split host and port
+HOST="${HOSTPORT%:*}"
+PORT="${HOSTPORT#*:}"
+
+echo "Waiting for Kafka at ${HOST}:${PORT}..."
 for i in {1..60}; do
-  if /bin/bash -c "/opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server ${HOSTPORT} --list >/dev/null 2>&1"; then
+  # Portable TCP check using bash's /dev/tcp
+  if timeout 2 bash -c ">/dev/tcp/${HOST}/${PORT}" 2>/dev/null; then
     echo "Kafka is up. Running: ${CMD[*]}"
     exec "$@"
   fi
