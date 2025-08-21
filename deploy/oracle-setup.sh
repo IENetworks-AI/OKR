@@ -161,18 +161,18 @@ setup_docker_services() {
     cd ~/okr-project
     
     # Stop any existing containers
-    docker-compose down || true
+    docker compose down || true
     
     # Build and start services
-    docker-compose build --no-cache
-    docker-compose up -d
+    docker compose build --no-cache
+    docker compose up -d
     
     # Wait for services to be ready
     print_status "Waiting for Docker services to be ready..."
     sleep 45
     
     # Check service status
-    docker-compose ps
+    docker compose ps
     
     print_status "Docker services setup completed"
 }

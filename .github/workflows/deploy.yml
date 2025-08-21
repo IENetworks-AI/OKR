@@ -155,8 +155,8 @@ jobs:
           
           # Start Docker services
           echo "Starting Docker services..."
-          docker-compose down || true
-          docker-compose up -d
+          docker compose down || true
+          docker compose up -d
           
           # Wait for services to be ready
           echo "Waiting for services to be ready..."
@@ -169,7 +169,7 @@ jobs:
           curl -f http://localhost:5001/ || echo "API not responding yet"
           
           # Test Docker containers
-          docker-compose ps
+          docker compose ps
           
           echo "Oracle server deployment completed successfully!"
           EOF
@@ -185,7 +185,7 @@ jobs:
           curl -f http://localhost:5001/ || echo "API test failed"
           
           echo "Testing Docker services..."
-          docker-compose ps
+          docker compose ps
           
           echo "Deployment verification completed"
           EOF
@@ -220,38 +220,7 @@ jobs:
       - name: Run ETL Pipeline Tests
         run: |
           echo "Running ETL pipeline tests on test branch..."
-          
-          # Test Airflow DAGs
-          python -c "
-          import sys
-          sys.path.append('airflow_dags')
-          from airflow.models import DagBag
-          dagbag = DagBag('airflow_dags/dags')
-          print(f'DAGs loaded: {len(dagbag.dags)}')
-          "
-          
-          # Test Kafka components
-          python -c "
-          import os
-          print('Kafka pipeline components:')
-          for root, dirs, files in os.walk('kafka_pipeline'):
-            for file in files:
-              if file.endswith('.py'):
-                print(f'  {os.path.join(root, file)}')
-          "
-          
-          # Test configuration files
-          python -c "
-          import yaml
-          configs = ['configs/db_config.yaml', 'configs/kafka_config.yaml', 'configs/model_config.yaml']
-          for config in configs:
-            try:
-              with open(config, 'r') as f:
-                yaml.safe_load(f)
-              print(f'✓ {config} is valid')
-            except Exception as e:
-              print(f'✗ {config} error: {e}')
-          "
+          python scripts/validate_etl_pipeline.py
       
       - name: Test Branch Summary
         run: |
