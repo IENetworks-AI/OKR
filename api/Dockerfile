@@ -11,10 +11,9 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY . /app
 
-# Expose Flask port
+# Expose API port
 EXPOSE 5001
 
-ENV FLASK_ENV=production
-
-CMD ["python", "api/app.py", "--host", "0.0.0.0", "--port", "5001"]
+# Run with gunicorn for production
+CMD ["gunicorn", "-b", "0.0.0.0:5001", "-w", "2", "api.app:app"]
 
