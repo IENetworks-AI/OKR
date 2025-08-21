@@ -15,7 +15,7 @@ COPY configs /app/configs
 ENV PYTHONPATH=/app
 
 # Add wait-for-kafka script
-COPY wait-for-kafka.sh /app/wait-for-kafka.sh
+COPY kafka_pipeline/wait-for-kafka.sh /app/wait-for-kafka.sh
 RUN chmod +x /app/wait-for-kafka.sh
 
 # Run wait script then producer

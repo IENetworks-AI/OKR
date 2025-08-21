@@ -227,7 +227,7 @@ test_services() {
     
     # Test Docker containers
     print_status "Testing Docker containers..."
-    docker-compose ps
+    docker compose ps
     
     # Test Kafka
     print_status "Testing Kafka..."
@@ -235,7 +235,7 @@ test_services() {
     
     # Test Airflow
     print_status "Testing Airflow..."
-    curl -f http://localhost:8080/ || print_warning "Airflow not responding yet"
+    curl -f http://localhost:8081/ || print_warning "Airflow not responding yet"
     
     print_status "Service testing completed"
 }
@@ -253,7 +253,7 @@ setup_firewall() {
     
     # Allow application ports
     sudo ufw allow 5001  # API
-    sudo ufw allow 8080  # Airflow
+    sudo ufw allow 8081  # Airflow (moved to 8081 to avoid conflicts)
     sudo ufw allow 8085  # Kafka UI
     sudo ufw allow 9092  # Kafka
     
