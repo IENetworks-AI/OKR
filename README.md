@@ -9,6 +9,9 @@ A comprehensive OKR (Objectives and Key Results) management system with machine 
 - **Kafka Streaming**: Real-time data ingestion and processing
 - **Airflow Pipelines**: Automated ETL, model training, and monitoring
 - **Oracle Cloud Deployment**: Automated CI/CD pipeline with GitHub Actions
+- **Docker Containerization**: All services run in Docker containers
+- **Branch Protection**: Strict controls with owner-only main branch access
+- **Comprehensive ETL Pipeline**: Clear procedures from development to deployment
 - **Sample Data Generation**: Built-in data generation for testing
 - **Comprehensive Testing**: Local testing suite before deployment
 
@@ -168,15 +171,28 @@ The interactive dashboard provides:
 
 ## 🚀 Deployment Process
 
+### Branch Protection & Access Control
+- **Main Branch**: Only repository owners can merge to main
+- **Test Branch**: All contributors can merge, triggers test deployment
+- **Feature Branches**: Development and testing only
+- **Required Reviews**: 2 approvals including repository owner
+- **Status Checks**: All quality, security, and deployment checks must pass
+
+### Oracle Server Deployment Workflow
 The GitHub Actions workflow:
 
-1. **Checks Oracle secrets** - Gracefully handles missing configuration
-2. **Sets up SSH connection** - Establishes secure connection to Oracle
-3. **Installs dependencies** - System packages, Python, and project requirements
-4. **Deploys code** - Syncs project files using rsync
-5. **Configures services** - Sets up Flask API, Kafka, and Airflow
-6. **Tests everything** - Verifies all services are working
-7. **Generates sample data** - Creates test data for immediate use
+1. **Permission Validation** - Checks if user has owner permissions
+2. **Oracle Secrets Check** - Validates deployment configuration
+3. **SSH Connection Setup** - Establishes secure connection to Oracle
+4. **Code Deployment** - Syncs project files using rsync
+5. **Docker Services Setup** - Runs comprehensive setup script
+6. **Service Validation** - Verifies all services are working
+7. **Sample Data Generation** - Creates test data for immediate use
+
+### Deployment Environments
+- **Production**: Main branch → Oracle server (owner only)
+- **Staging**: Test branch → Oracle server (all contributors)
+- **Development**: Feature branches → Local Docker only
 
 ## 🧪 Testing
 
@@ -210,10 +226,13 @@ This script tests:
 
 ## 🔒 Security
 
+- **Branch Protection**: Only repository owners can merge to main
 - **SSH Keys**: Secure Oracle access using SSH keys
 - **Secrets Management**: GitHub secrets for sensitive data
 - **Firewall**: Oracle instance configured with minimal open ports
-- **Service Isolation**: Each service runs in its own context
+- **Service Isolation**: Each service runs in its own Docker container
+- **Code Reviews**: Required reviews for all changes
+- **Security Scans**: Automated security scanning in CI/CD
 
 ## 🐛 Troubleshooting
 
@@ -263,15 +282,52 @@ tail -f ~/okr-project/airflow_scheduler.log
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test locally with `python scripts/setup_local.py`
-5. Submit a pull request
+### Development Workflow
+1. **Fork the repository**
+2. **Create a feature branch** from `develop`
+   ```bash
+   git checkout develop
+   git pull origin develop
+   git checkout -b feature/your-feature-name
+   ```
+3. **Make your changes** and test locally
+   ```bash
+   docker-compose up -d
+   python scripts/setup_local.py
+   ```
+4. **Create pull request** to `develop` branch
+   - Include description of changes
+   - Link related issues
+   - Request reviews from repository owners
+5. **Code review process**
+   - Address review comments
+   - Ensure all checks pass
+   - Get approval from repository owners
+6. **Merge to develop** after approval
+
+### Branch Strategy
+- **Feature branches**: `feature/*` - Individual features
+- **Develop branch**: Integration of features
+- **Test branch**: Staging and testing
+- **Main branch**: Production (owner only)
+
+### Required for All Changes
+- [ ] Code review completed
+- [ ] All tests passing
+- [ ] Security scan passed
+- [ ] Documentation updated
+- [ ] No merge conflicts
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 📚 Documentation
+
+- **[ETL Pipeline Procedures](ETL_PIPELINE_PROCEDURES.md)** - Complete ETL workflow documentation
+- **[Deployment Guide](DEPLOYMENT.md)** - Detailed deployment instructions
+- **[Branch Protection Rules](.github/branch-protection-rules.md)** - Access control and workflow rules
+- **[Oracle Instructions](ORACLE_INSTRUCTIONS.md)** - Oracle-specific setup and configuration
 
 ## 🆘 Support
 
@@ -280,6 +336,7 @@ For issues and questions:
 2. Review GitHub Actions logs
 3. Check service logs on Oracle instance
 4. Open an issue in the repository
+5. Contact repository owners for deployment issues
 
 ## 🎯 Roadmap
 
