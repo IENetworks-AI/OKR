@@ -11,8 +11,8 @@ on:
         default: 'production'
         type: choice
         options:
-        - production
-        - staging
+          - production
+          - staging
 
 jobs:
   # Pre-deployment validation
@@ -24,7 +24,6 @@ jobs:
       - name: Check if user has owner permissions
         id: check-permissions
         run: |
-          # Check if the user has owner role or is a repository owner
           if [ "${{ github.actor }}" = "${{ github.repository_owner }}" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "user_authorized=true" >> $GITHUB_OUTPUT
             echo "User has deployment permissions"
@@ -37,8 +36,6 @@ jobs:
         if: steps.check-permissions.outputs.user_authorized == 'true'
         run: |
           echo "Validating Oracle deployment prerequisites..."
-          
-          # Check required files
           required_files=(
             "deploy/oracle-setup.sh"
             "deploy/mlapi.service"
@@ -46,7 +43,6 @@ jobs:
             "docker-compose.yml"
             "requirements.txt"
           )
-          
           for file in "${required_files[@]}"; do
             if [ ! -f "$file" ]; then
               echo "❌ Missing required file: $file"
@@ -54,7 +50,6 @@ jobs:
             fi
             echo "✓ $file found"
           done
-          
           echo "All prerequisites validated successfully"
 
   # Oracle Server Deployment
@@ -85,7 +80,6 @@ jobs:
           else
             echo "oracle_deploy=false" >> $GITHUB_OUTPUT
             echo "Oracle deployment secrets not found - skipping deployment"
-            echo "Required secrets: ORACLE_SSH_KEY"
           fi
 
       - name: Setup SSH
@@ -94,113 +88,73 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.ORACLE_SSH_KEY }}" > ~/.ssh/oracle.key
           chmod 600 ~/.ssh/oracle.key
-          ssh-keyscan -H 139.185.33.139 >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.ORACLE_HOST }} >> ~/.ssh/known_hosts
 
       - name: Test SSH Connection
         if: steps.check-deployment.outputs.oracle_deploy == 'true'
         run: |
-          echo "Testing SSH connection to Oracle server..."
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/oracle.key ubuntu@139.185.33.139 "echo 'SSH connection successful'; uname -a; whoami; pwd"
-          echo "SSH connection test completed successfully"
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/oracle.key ubuntu@${{ secrets.ORACLE_HOST }} "echo 'SSH connection successful'"
 
       - name: Deploy Code to Oracle Server
         if: steps.check-deployment.outputs.oracle_deploy == 'true'
         run: |
-          echo "Starting deployment to Oracle Cloud..."
-          echo "Target: ${{ secrets.ORACLE_HOST }}"
-          echo "Project: okr-project"
-          
-          # Deploy using rsync
           rsync -avz --delete -e "ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no" \
             --exclude='.git' \
             --exclude='__pycache__' \
             --exclude='*.pyc' \
             --exclude='.pytest_cache' \
             --exclude='venv' \
-            ./ ubuntu@139.185.33.139:/home/ubuntu/okr-project/
-          
-          echo "Code deployment completed"
+            ./ ubuntu@${{ secrets.ORACLE_HOST }}:/home/ubuntu/okr-project/
 
       - name: Setup Oracle Server Environment
         if: steps.check-deployment.outputs.oracle_deploy == 'true'
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/oracle.key ubuntu@139.185.33.139 << 'EOF'
-          echo "Setting up Oracle server environment..."
-          
-          # Navigate to project directory
-          cd ~/okr-project
-          
-          # Run Oracle-specific setup script
-          if [ -f "deploy/oracle-setup.sh" ]; then
-            echo "Running Oracle setup script..."
-            chmod +x deploy/oracle-setup.sh
-            ./deploy/oracle-setup.sh
-          else
-            echo "Oracle setup script not found, running basic setup..."
-            
-            # Basic setup
-            sudo apt-get update
-            sudo apt-get install -y python3 python3-pip python3-venv docker.io docker-compose
-            
-            # Create virtual environment
-            python3 -m venv venv
-            source venv/bin/activate
-            pip install --upgrade pip
-            pip install -r requirements.txt
-            
-            # Setup systemd service
-            sudo cp deploy/mlapi.service /etc/systemd/system/
-            sudo systemctl daemon-reload
-            sudo systemctl enable mlapi.service
-            sudo systemctl start mlapi.service
-          fi
-          
-          # Start Docker services
-          echo "Starting Docker services..."
-          docker compose down || true
-          docker compose up -d
-          
-          # Wait for services to be ready
-          echo "Waiting for services to be ready..."
-          sleep 30
-          
-          # Test services
-          echo "Testing deployed services..."
-          
-          # Test API
-          curl -f http://localhost:5001/ || echo "API not responding yet"
-          
-          # Test Docker containers
-          docker compose ps
-          
-          echo "Oracle server deployment completed successfully!"
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/oracle.key ubuntu@${{ secrets.ORACLE_HOST }} << 'EOF'
+            echo "Setting up Oracle server environment..."
+            cd ~/okr-project
+            if [ -f "deploy/oracle-setup.sh" ]; then
+              chmod +x deploy/oracle-setup.sh
+              ./deploy/oracle-setup.sh
+            else
+              sudo apt-get update
+              sudo apt-get install -y python3 python3-pip python3-venv docker.io docker-compose
+              python3 -m venv venv
+              source venv/bin/activate
+              pip install --upgrade pip
+              pip install -r requirements.txt
+              sudo cp deploy/mlapi.service /etc/systemd/system/
+              sudo systemctl daemon-reload
+              sudo systemctl enable mlapi.service
+              sudo systemctl start mlapi.service
+            fi
+
+            # Start Docker services
+            docker compose down || true
+            docker compose up -d
+
+            # Wait for Kafka, Airflow DB, API
+            echo "Waiting for services to become healthy..."
+            sleep 30
+            docker compose ps
+
+            # Healthcheck API
+            curl -f http://localhost:5001/ || echo "API not responding yet"
           EOF
 
       - name: Verify Deployment
         if: steps.check-deployment.outputs.oracle_deploy == 'true'
         run: |
-          echo "Verifying deployment..."
-          
-          # Test API endpoint
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/oracle.key ubuntu@139.185.33.139 << 'EOF'
-          echo "Testing API endpoint..."
-          curl -f http://localhost:5001/ || echo "API test failed"
-          
-          echo "Testing Docker services..."
-          docker compose ps
-          
-          echo "Deployment verification completed"
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/oracle.key ubuntu@${{ secrets.ORACLE_HOST }} << 'EOF'
+            echo "Verifying deployment..."
+            docker compose ps
+            curl -f http://localhost:5001/ || echo "API test failed"
           EOF
 
       - name: Deployment Summary
         if: steps.check-deployment.outputs.oracle_deploy == 'false'
         run: |
-          echo "Deployment completed successfully!"
-          echo "Oracle deployment was skipped (secrets not configured)"
-          echo "To enable Oracle deployment, configure the following secrets:"
-          echo "   - ORACLE_SSH_KEY: Private SSH key for Oracle instance"
-          echo "   - ORACLE_HOST: Oracle instance IP address"
-          echo "Local development can continue without these secrets"
+          echo "Oracle deployment skipped (secrets not configured)."
+          echo "Configure ORACLE_SSH_KEY and ORACLE_HOST to enable deployment."
 
   # Test Branch Pipeline (No Deployment)
   test-pipeline:
@@ -221,11 +175,5 @@ jobs:
       
       - name: Run ETL Pipeline Tests
         run: |
-          echo "Running ETL pipeline tests on test branch..."
           python scripts/validate_etl_pipeline.py
-      
-      - name: Test Branch Summary
-        run: |
-          echo "Test branch pipeline completed successfully!"
-          echo "No deployment performed - this is a test branch"
-          echo "Deployment only occurs on main branch with owner permissions"
+          echo "ETL pipeline tests completed successfully."

@@ -31,7 +31,6 @@ services:
     depends_on:
       - api
     restart: always
-    # fixed healthcheck (wget works in alpine, curl doesn’t by default)
     healthcheck:
       test: ["CMD-SHELL", "wget --spider -q http://localhost || exit 1"]
       interval: 30s
@@ -40,31 +39,27 @@ services:
     networks:
       - okr_net
 
-  # Kafka with KRaft mode (no Zookeeper)
+  # Kafka with KRaft mode
   kafka:
     image: bitnami/kafka:latest
     container_name: okr_kafka
     hostname: kafka
     environment:
+      - KAFKA_KRAFT_MODE=yes
       - KAFKA_CFG_PROCESS_ROLES=broker,controller
       - KAFKA_CFG_NODE_ID=1
-      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
       - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
       - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
-
-
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
-      - KAFKA_CFG_NODE_ID=1
-      - KAFKA_KRAFT_CLUSTER_ID=abcdefghijklmnopqrstuv
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      - KAFKA_BROKER_ID=1
-
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
       - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - ALLOW_PLAINTEXT_LISTENER=yes
     ports:
       - "9092:9092"
     restart: always
     healthcheck:
-      test: ["CMD", "/opt/bitnami/kafka/bin/kafka-topics.sh", "--bootstrap-server", "kafka:9092", "--list"]
+      test: ["CMD-SHELL", "/opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -138,12 +133,9 @@ services:
     depends_on:
       - airflow-db
     environment:
-
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
       - AIRFLOW__CORE__FERNET_KEY=30e6QztCFtuew7bCiQUZiomQd0eq2eWwHf39LaQyBaU=
-
-
       - AIRFLOW__WEBSERVER__SECRET_KEY=supersecret
       - PIP_ADDITIONAL_REQUIREMENTS=joblib scikit-learn pandas pyyaml numpy
     user: "50000:0"
@@ -180,3 +172,4 @@ services:
 networks:
   okr_net:
     driver: bridge
+          
