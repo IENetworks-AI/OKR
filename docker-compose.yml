@@ -5,8 +5,6 @@ services:
       context: .
       dockerfile: api/Dockerfile
     container_name: okr_api
-    ports:
-      - "5001:5001"
     volumes:
       - ./:/app
     depends_on:
