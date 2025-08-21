@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   # Flask API
   api:
@@ -6,7 +8,7 @@ services:
       dockerfile: api/Dockerfile
     container_name: okr_api
     ports:
-      - "5001:5001"
+      - "${API_HOST_PORT:-5001}:5001"  # allows changing host port via env variable
     volumes:
       - ./:/app
     depends_on:
@@ -172,4 +174,3 @@ services:
 networks:
   okr_net:
     driver: bridge
-          
