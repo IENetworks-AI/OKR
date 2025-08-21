@@ -177,11 +177,13 @@ All services run in Docker containers:
 
 ### 1. Oracle Deployment Secrets
 - `ORACLE_SSH_KEY`: Private SSH key for Oracle instance
-- `ORACLE_HOST`: Oracle instance IP address
+- **Oracle IP**: Hardcoded to `139.185.33.139` (previous working configuration)
 
-### 2. Optional Secrets
-- `ORACLE_USER`: Oracle server username (default: ubuntu)
-- `ORACLE_PORT`: SSH port (default: 22)
+### 2. Oracle Server Configuration
+- **IP Address**: `139.185.33.139` (hardcoded)
+- **Username**: `ubuntu` (hardcoded)
+- **SSH Port**: `22` (default)
+- **Project Directory**: `/home/ubuntu/okr-project`
 
 ## 🎯 Key Benefits
 
