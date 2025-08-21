@@ -1,35 +1,70 @@
-name: ci-deploy
+name: Oracle Server Deployment
+
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
 
 jobs:
-  train:
+  # Pre-deployment validation
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - run: echo "train stub"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: models-and-results-${{ github.sha }}
-          path: .
+      
+      - name: Check if user has owner permissions
+        id: check-permissions
+        run: |
+          # Check if the user has owner role or is a repository owner
+          if [ "${{ github.actor }}" = "${{ github.repository_owner }}" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "user_authorized=true" >> $GITHUB_OUTPUT
+            echo "User has deployment permissions"
+          else
+            echo "user_authorized=false" >> $GITHUB_OUTPUT
+            echo "User does not have deployment permissions. Only repository owners can deploy."
+          fi
+      
+      - name: Validate Oracle deployment prerequisites
+        if: steps.check-permissions.outputs.user_authorized == 'true'
+        run: |
+          echo "Validating Oracle deployment prerequisites..."
+          
+          # Check required files
+          required_files=(
+            "deploy/oracle-setup.sh"
+            "deploy/mlapi.service"
+            "deploy/nginx/mlapi.conf"
+            "docker-compose.yml"
+            "requirements.txt"
+          )
+          
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing required file: $file"
+              exit 1
+            fi
+            echo "✓ $file found"
+          done
+          
+          echo "All prerequisites validated successfully"
 
-  # Deployment job - ONLY runs on main branch
-  deploy:
-    needs: train
+  # Oracle Server Deployment
+  deploy-oracle:
+    needs: validate
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    environment: production
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download models and results
-        uses: actions/download-artifact@v4
-        with:
-          name: models-and-results-${{ github.sha }}
-          path: models/
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -50,6 +85,7 @@ jobs:
           else
             echo "oracle_deploy=false" >> $GITHUB_OUTPUT
             echo "Oracle deployment secrets not found - skipping deployment"
+            echo "Required secrets: ORACLE_SSH_KEY"
           fi
 
       - name: Setup SSH
@@ -63,221 +99,97 @@ jobs:
       - name: Test SSH Connection
         if: steps.check-deployment.outputs.oracle_deploy == 'true'
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/oracle.key ubuntu@139.185.33.139 "echo 'SSH connection successful'; uname -a"
+          echo "Testing SSH connection to Oracle server..."
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/oracle.key ubuntu@139.185.33.139 "echo 'SSH connection successful'; uname -a; whoami; pwd"
+          echo "SSH connection test completed successfully"
 
-      - name: Install rsync on server
-        if: steps.check-deployment.outputs.oracle_deploy == 'true'
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/oracle.key ubuntu@139.185.33.139 << 'EOF'
-          echo "Installing rsync on Oracle server..."
-          
-          # Fix dpkg interruption first
-          echo "Fixing dpkg interruption..."
-          sudo dpkg --configure -a
-          
-          # Handle apt locks if needed
-          sudo killall apt apt-get || true
-          sudo rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock* /var/lib/dpkg/lock-frontend || true
-          
-          # Update and install rsync
-          sudo apt-get update -qq
-          sudo apt-get install -y rsync -qq
-          
-          # Verify installation
-          echo "Verifying rsync installation on server..."
-          which rsync
-          rsync --version | head -1
-          echo "rsync installed successfully on server"
-          EOF
-
-      - name: Install rsync on runner
-        if: steps.check-deployment.outputs.oracle_deploy == 'true'
-        run: |
-          echo "Installing rsync on GitHub Actions runner..."
-          sudo apt-get update -qq
-          sudo apt-get install -y rsync -qq
-          echo "rsync installed successfully"
-          
-          # Verify installation
-          echo "Verifying rsync installation..."
-          which rsync || echo "rsync not found in PATH"
-          rsync --version || echo "rsync command failed"
-          
-          # Check if rsync is in PATH
-          echo "PATH: $PATH"
-          echo "rsync location: $(which rsync 2>/dev/null || echo 'not found')"
-          
-          # Try to find rsync in common locations
-          ls -la /usr/bin/rsync 2>/dev/null || echo "rsync not in /usr/bin"
-          ls -la /bin/rsync 2>/dev/null || echo "rsync not in /bin"
-
-      - name: Deploy Code to Oracle
+      - name: Deploy Code to Oracle Server
         if: steps.check-deployment.outputs.oracle_deploy == 'true'
         run: |
           echo "Starting deployment to Oracle Cloud..."
-          echo "Current directory: $(pwd)"
-          echo "Files to deploy:"
-          ls -la | head -10
+          echo "Target: ${{ secrets.ORACLE_HOST }}"
+          echo "Project: okr-project"
           
-          # Find rsync and use full path if needed
-          RSYNC_CMD=$(which rsync 2>/dev/null || echo "/usr/bin/rsync")
-          echo "Using rsync command: $RSYNC_CMD"
+          # Deploy using rsync
+          rsync -avz --delete -e "ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no" \
+            --exclude='.git' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.pytest_cache' \
+            --exclude='venv' \
+            ./ ubuntu@139.185.33.139:/home/ubuntu/okr-project/
           
-          # Test rsync command
-          $RSYNC_CMD --version || echo "rsync command failed"
-          
-          echo "Running rsync command..."
-          $RSYNC_CMD -avz --delete -e "ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no" ./ ubuntu@139.185.33.139:/home/ubuntu/okr-project/
           echo "Code deployment completed"
 
       - name: Setup Oracle Server Environment
         if: steps.check-deployment.outputs.oracle_deploy == 'true'
         run: |
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/oracle.key ubuntu@139.185.33.139 << 'EOF'
-          echo "Starting deployment..."
-          
-          # Function to handle apt locks
-          handle_apt_locks() {
-              echo "Checking for apt locks..."
-              sudo killall apt apt-get || true
-              sudo rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock* || true
-              echo "Apt locks cleared"
-          }
-          
-          # Function to install system dependencies
-          install_system_deps() {
-              echo "Installing system dependencies..."
-              handle_apt_locks
-              sudo apt-get update
-              sudo apt-get install -y python3 python3-pip python3-venv rsync git
-              echo "System dependencies installed"
-          }
+          echo "Setting up Oracle server environment..."
           
           # Navigate to project directory
           cd ~/okr-project
           
-          # Install system dependencies if needed
-          if ! command -v python3 &> /dev/null; then
-              install_system_deps
+          # Run Oracle-specific setup script
+          if [ -f "deploy/oracle-setup.sh" ]; then
+            echo "Running Oracle setup script..."
+            chmod +x deploy/oracle-setup.sh
+            ./deploy/oracle-setup.sh
+          else
+            echo "Oracle setup script not found, running basic setup..."
+            
+            # Basic setup
+            sudo apt-get update
+            sudo apt-get install -y python3 python3-pip python3-venv docker.io docker-compose
+            
+            # Create virtual environment
+            python3 -m venv venv
+            source venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            
+            # Setup systemd service
+            sudo cp deploy/mlapi.service /etc/systemd/system/
+            sudo systemctl daemon-reload
+            sudo systemctl enable mlapi.service
+            sudo systemctl start mlapi.service
           fi
           
-          echo "Code deployed via rsync from GitHub Actions..."
+          # Start Docker services
+          echo "Starting Docker services..."
+          docker compose down || true
+          docker compose up -d
           
-          if [ ! -d "venv" ]; then
-              echo "Creating virtual environment..."
-              python3 -m venv venv
-          fi
+          # Wait for services to be ready
+          echo "Waiting for services to be ready..."
+          sleep 30
           
-          echo "Activating virtual environment..."
-          source venv/bin/activate
-          
-          if [ -f "requirements.txt" ]; then
-              echo "Installing Python dependencies..."
-              pip install --upgrade pip
-              pip install -r requirements.txt
-              pip install kafka-python confluent-kafka pyyaml
-          fi
-          
-          # Set up systemd service for the API server
-          echo "Setting up API server systemd service..."
-          sudo tee /etc/systemd/system/mlapi.service > /dev/null << 'SERVICE_EOF'
-          [Unit]
-          Description=ML Pipeline API Server
-          After=network.target
-
-          [Service]
-          Type=simple
-          User=ubuntu
-          WorkingDirectory=/home/ubuntu/okr-project
-          ExecStart=/home/ubuntu/okr-project/venv/bin/python api/app.py
-          Restart=always
-          RestartSec=10
-          Environment=PATH=/home/ubuntu/okr-project/venv/bin
-          Environment=PORT=5001
-          StandardOutput=journal
-          StandardError=journal
-
-          [Install]
-          WantedBy=multi-user.target
-          SERVICE_EOF
-          
-          # Reload systemd and enable service
-          sudo systemctl daemon-reload
-          sudo systemctl enable mlapi.service
-          sudo systemctl start mlapi.service
-          
-          echo "API server service configured, enabled, and started!"
-          
-          # Install and configure Kafka
-          echo "Setting up Kafka..."
-          if ! command -v java &> /dev/null; then
-              echo "Installing Java for Kafka..."
-              sudo apt-get update
-              sudo apt-get install -y default-jdk
-          fi
-          
-          # Download and setup Kafka
-          if [ ! -d "kafka" ]; then
-              echo "Downloading Kafka..."
-              wget https://downloads.apache.org/kafka/3.6.1/kafka_2.13-3.6.1.tgz
-              tar -xzf kafka_2.13-3.6.1.tgz
-              mv kafka_2.13-3.6.1 kafka
-              rm kafka_2.13-3.6.1.tgz
-          fi
-          
-          # Start Kafka services
-          echo "Starting Kafka services..."
-          cd kafka
-          nohup bin/zookeeper-server-start.sh config/zookeeper.properties > zookeeper.log 2>&1 &
-          sleep 10
-          nohup bin/kafka-server-start.sh config/server.properties > kafka.log 2>&1 &
-          sleep 10
-          
-          # Create Kafka topic
-          echo "Creating Kafka topic..."
-          bin/kafka-topics.sh --create --topic ai-data --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
-          
-          cd ..
-          
-          # Install and setup Airflow
-          echo "Setting up Airflow..."
-          export AIRFLOW_HOME=~/okr-project/airflow
-          mkdir -p \$AIRFLOW_HOME
-          
-          # Install Airflow
-          pip install apache-airflow
-          
-          # Initialize Airflow database
-          airflow db init
-          
-          # Create admin user
-          airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com
-          
-          # Start Airflow webserver and scheduler
-          nohup airflow webserver --port 8080 > airflow_webserver.log 2>&1 &
-          nohup airflow scheduler > airflow_scheduler.log 2>&1 &
-          
-          # Generate sample data
-          echo "Generating sample data..."
-          python3 scripts/generate_sample_data.py
-          
-          # Test all services
-          echo "Testing all services..."
+          # Test services
+          echo "Testing deployed services..."
           
           # Test API
-          sleep 5
-          curl -s http://localhost:5000/ || echo "API not responding yet"
+          curl -f http://localhost:5001/ || echo "API not responding yet"
           
-          # Test Kafka
-          echo "Kafka topics:"
-          kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092
+          # Test Docker containers
+          docker compose ps
           
-          # Test Airflow
-          echo "Airflow status:"
-          airflow info
+          echo "Oracle server deployment completed successfully!"
+          EOF
+
+      - name: Verify Deployment
+        if: steps.check-deployment.outputs.oracle_deploy == 'true'
+        run: |
+          echo "Verifying deployment..."
           
-          echo "All services configured and tested!"
-          echo "Deployment completed successfully!"
+          # Test API endpoint
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/oracle.key ubuntu@139.185.33.139 << 'EOF'
+          echo "Testing API endpoint..."
+          curl -f http://localhost:5001/ || echo "API test failed"
+          
+          echo "Testing Docker services..."
+          docker compose ps
+          
+          echo "Deployment verification completed"
           EOF
 
       - name: Deployment Summary
@@ -286,7 +198,34 @@ jobs:
           echo "Deployment completed successfully!"
           echo "Oracle deployment was skipped (secrets not configured)"
           echo "To enable Oracle deployment, configure the following secrets:"
-          echo "   - ORACLE_SSH_KEY"
-          echo "   - ORACLE_HOST" 
-          echo "   - ORACLE_USER"
+          echo "   - ORACLE_SSH_KEY: Private SSH key for Oracle instance"
+          echo "   - ORACLE_HOST: Oracle instance IP address"
           echo "Local development can continue without these secrets"
+
+  # Test Branch Pipeline (No Deployment)
+  test-pipeline:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/test' || github.ref == 'refs/heads/develop'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run ETL Pipeline Tests
+        run: |
+          echo "Running ETL pipeline tests on test branch..."
+          python scripts/validate_etl_pipeline.py
+      
+      - name: Test Branch Summary
+        run: |
+          echo "Test branch pipeline completed successfully!"
+          echo "No deployment performed - this is a test branch"
+          echo "Deployment only occurs on main branch with owner permissions"

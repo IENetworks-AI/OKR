@@ -51,8 +51,14 @@ services:
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
       - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
       - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
-      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
-      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+
+
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_KRAFT_CLUSTER_ID=abcdefghijklmnopqrstuv
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_BROKER_ID=1
+
       - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
     ports:
       - "9092:9092"
@@ -74,7 +80,8 @@ services:
       - KAFKA_CLUSTERS_0_NAME=okr
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     restart: always
     networks:
       - okr_net
@@ -86,7 +93,8 @@ services:
       dockerfile: kafka_pipeline/producers/Dockerfile
     container_name: okr_producer
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     restart: always
     networks:
       - okr_net
@@ -98,7 +106,8 @@ services:
       dockerfile: kafka_pipeline/consumers/Dockerfile
     container_name: okr_consumer
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     restart: always
     networks:
       - okr_net
@@ -129,10 +138,14 @@ services:
     depends_on:
       - airflow-db
     environment:
+
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
       - AIRFLOW__CORE__FERNET_KEY=30e6QztCFtuew7bCiQUZiomQd0eq2eWwHf39LaQyBaU=
+
+
       - AIRFLOW__WEBSERVER__SECRET_KEY=supersecret
+      - PIP_ADDITIONAL_REQUIREMENTS=joblib scikit-learn pandas pyyaml numpy
     user: "50000:0"
     volumes:
       - ./airflow_dags/dags:/opt/airflow/dags

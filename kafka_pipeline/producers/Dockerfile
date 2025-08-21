@@ -2,11 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy requirements and install
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy code and configs
+# Copy project root requirements
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Copy only kafka pipeline and configs
+
 COPY kafka_pipeline /app/kafka_pipeline
 COPY configs /app/configs
 

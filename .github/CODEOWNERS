@@ -1,0 +1,53 @@
+# Code Owners for OKR Project
+# This file defines who is responsible for different parts of the codebase
+
+# Global owners - these users will be the default owners for everything in the repo
+# Unless a later match takes precedence, these users will be requested for review when someone opens a pull request
+* @repository-owner
+
+# Deployment and infrastructure files
+/.github/ @repository-owner
+/deploy/ @repository-owner
+/docker-compose.yml @repository-owner
+/Dockerfile* @repository-owner
+
+# ETL Pipeline components
+/airflow_dags/ @repository-owner
+/kafka_pipeline/ @repository-owner
+/scripts/ @repository-owner
+
+# API and core application
+/api/ @repository-owner
+/app.py @repository-owner
+
+# Configuration files
+/configs/ @repository-owner
+/requirements.txt @repository-owner
+
+# Documentation
+/README.md @repository-owner
+/DEPLOYMENT.md @repository-owner
+/ETL_PIPELINE_PROCEDURES.md @repository-owner
+/.github/branch-protection-rules.md @repository-owner
+
+# Security and compliance
+/.github/workflows/ @repository-owner
+/.github/CODEOWNERS @repository-owner
+/.gitignore @repository-owner
+/.gitattributes @repository-owner
+
+# Data and models
+/data/ @repository-owner
+/models/ @repository-owner
+
+# Tests
+/tests/ @repository-owner
+/test_*.py @repository-owner
+
+# Environment and secrets
+/.env* @repository-owner
+/secrets/ @repository-owner
+
+# Oracle-specific files
+/oracle/ @repository-owner
+/oracle_*.py @repository-owner

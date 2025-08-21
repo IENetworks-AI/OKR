@@ -98,6 +98,12 @@ def predict():
     y = float(model.predict([[t]])[0])
     return jsonify({"pred": y})
 
+
+@app.get("/health")
+def health():
+    """Health check endpoint"""
+    return {"status": "healthy", "service": "mlapi", "timestamp": datetime.datetime.now().isoformat()}
+
 # --- Dashboard routes ---
 @app.get("/dashboard")
 def dashboard():
