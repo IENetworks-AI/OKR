@@ -1,43 +1,36 @@
 services:
-  # Flask API running on port 5001
-  api:
-    build:
-      context: .
-      dockerfile: api/Dockerfile
-    container_name: okr_api
-    ports:
-      - "5001:5001"
+  # PostgreSQL for Airflow metadata
+  airflow-db:
+    image: postgres:15
+    container_name: okr_airflow_db
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
     volumes:
-      - ./:/app
-    depends_on:
-      - kafka
+      - airflow_db_data:/var/lib/postgresql/data
     restart: always
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5001/ || exit 1"]
-      interval: 20s
-      timeout: 5s
-      retries: 5
     networks:
       - okr_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
-  # Nginx reverse proxy to API
-  nginx:
-    image: nginx:1.25-alpine
-    container_name: okr_nginx
-    ports:
-      - "0.0.0.0:80:80"  # Bind to all interfaces
-    volumes:
-      - ./deploy/nginx/mlapi.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - api
+  # Redis for Airflow (optional but recommended)
+  redis:
+    image: redis:7-alpine
+    container_name: okr_redis
     restart: always
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/health >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
     networks:
       - okr_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Kafka with KRaft mode
   kafka:
@@ -48,34 +41,43 @@ services:
       - KAFKA_KRAFT_MODE=yes
       - KAFKA_CFG_PROCESS_ROLES=broker,controller
       - KAFKA_CFG_NODE_ID=1
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://0.0.0.0:9094
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
       - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
       - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
       - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
       - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_LOG_RETENTION_HOURS=168
+      - KAFKA_CFG_LOG_SEGMENT_BYTES=1073741824
+      - KAFKA_CFG_LOG_RETENTION_CHECK_INTERVAL_MS=300000
     ports:
-      - "0.0.0.0:9092:9092"  # Internal listener
-      - "0.0.0.0:9094:9094"  # External listener
+      - "9092:9092"
+    volumes:
+      - kafka_data:/bitnami/kafka
     restart: always
+    depends_on:
+      - airflow-db
+    networks:
+      - okr_net
     healthcheck:
-      test: ["CMD-SHELL", "/opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list || exit 1"]
+      test: ["CMD-SHELL", "/opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 10
-    networks:
-      - okr_net
+      start_period: 60s
 
+  # Kafka UI
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: okr_kafka_ui
     ports:
-      - "0.0.0.0:8085:8080"  # Bind to all interfaces
+      - "8085:8080"
     environment:
       - KAFKA_CLUSTERS_0_NAME=okr
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - KAFKA_CLUSTERS_0_READONLY=false
     depends_on:
       kafka:
         condition: service_healthy
@@ -83,56 +85,14 @@ services:
     networks:
       - okr_net
 
-  # Kafka demo producer (commented out - using new streaming module)
-  # producer:
-  #   build:
-  #     context: .
-  #     dockerfile: kafka_pipeline/producers/Dockerfile
-  #   container_name: okr_producer
-  #   depends_on:
-  #     kafka:
-  #       condition: service_healthy
-  #   restart: "no"
-  #   networks:
-  #     - okr_net
-
-  # Kafka demo consumer (commented out - using new streaming module)
-  # consumer:
-  #   build:
-  #     context: .
-  #     dockerfile: kafka_pipeline/consumers/Dockerfile
-  #   container_name: okr_consumer
-  #   depends_on:
-  #     kafka:
-  #       condition: service_healthy
-  #   restart: always
-  #   networks:
-  #     - okr_net
-
-  # PostgreSQL for Airflow metadata
-  airflow-db:
-    image: postgres:15
-    container_name: okr_airflow_db
-    environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
-    # no host port to avoid conflicts
-    restart: always
-    networks:
-      - okr_net
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airflow"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Airflow with LocalExecutor and PostgreSQL
-  airflow:
+  # Airflow webserver
+  airflow-webserver:
     image: apache/airflow:2.9.2
-    container_name: okr_airflow
+    container_name: okr_airflow_webserver
     depends_on:
       airflow-db:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
@@ -144,24 +104,99 @@ services:
       - AIRFLOW__WEBSERVER__AUTHENTICATE=true
       - AIRFLOW__WEBSERVER__AUTH_BACKEND=airflow.auth.backend.basic_auth
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
-      - PIP_ADDITIONAL_REQUIREMENTS=joblib scikit-learn pandas pyyaml numpy
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
+      - AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC
+      - AIRFLOW__WEBSERVER__HOST=0.0.0.0
+      - AIRFLOW__WEBSERVER__PORT=8080
     user: "50000:0"
     volumes:
       - ./src/dags:/opt/airflow/dags
-      - ./requirements.txt:/requirements.txt
+      - ./data:/opt/airflow/data
+      - ./logs:/opt/airflow/logs
       - ./airflow-init.sh:/airflow-init.sh
-    entrypoint: ["/bin/bash"]
-    command: ["/airflow-init.sh"]
     ports:
-      - "0.0.0.0:8081:8080"  # Bind to all interfaces
+      - "8081:8080"
     restart: always
+    networks:
+      - okr_net
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
       interval: 30s
-      timeout: 5s
-      retries: 10
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Airflow scheduler
+  airflow-scheduler:
+    image: apache/airflow:2.9.2
+    container_name: okr_airflow_scheduler
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=30e6QztCFtuew7bCiQUZiomQd0eq2eWwHf39LaQyBaU=
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
+      - AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC
+    user: "50000:0"
+    volumes:
+      - ./src/dags:/opt/airflow/dags
+      - ./data:/opt/airflow/data
+      - ./logs:/opt/airflow/logs
+    restart: always
     networks:
       - okr_net
+    command: ["airflow", "scheduler"]
+
+  # Flask API
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: okr_api
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./:/app
+      - ./data:/app/data
+    depends_on:
+      kafka:
+        condition: service_healthy
+      airflow-db:
+        condition: service_healthy
+    restart: always
+    networks:
+      - okr_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: okr_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx/mlapi.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: always
+    networks:
+      - okr_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   # Oracle XE database
   oracle:
@@ -169,14 +204,56 @@ services:
     container_name: okr_oracle
     environment:
       - ORACLE_PASSWORD=oracle
+      - ORACLE_DATABASE=OKR
+      - APP_USER=okr_user
+      - APP_USER_PASSWORD=okr_password
     ports:
-      - "0.0.0.0:1521:1521"  # Bind to all interfaces
-      - "0.0.0.0:5500:5500"  # Bind to all interfaces
+      - "1521:1521"
+      - "5500:5500"
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+    restart: always
+    networks:
+      - okr_net
+    healthcheck:
+      test: ["CMD-SHELL", "sqlplus -L okr_user/okr_password@localhost:1521/OKR as sysdba -c 'SELECT 1 FROM DUAL' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  # MLflow tracking server
+  mlflow:
+    image: python:3.11-slim
+    container_name: okr_mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./:/app
+      - mlflow_data:/mlflow
+    working_dir: /app
+    depends_on:
+      - airflow-db
+    environment:
+      - MLFLOW_TRACKING_URI=http://localhost:5000
+      - MLFLOW_TRACKING_USERNAME=mlflow
+      - MLFLOW_TRACKING_PASSWORD=mlflow
+    command: >
+      bash -c "pip install mlflow psycopg2-binary &&
+               mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri postgresql://airflow:airflow@airflow-db:5432/airflow --default-artifact-root /mlflow"
     restart: always
     networks:
       - okr_net
 
+volumes:
+  airflow_db_data:
+  kafka_data:
+  oracle_data:
+  mlflow_data:
+
 networks:
   okr_net:
     driver: bridge
-          
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16          

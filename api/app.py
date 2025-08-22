@@ -7,28 +7,39 @@ app = Flask(__name__)
 try:
     # Try multiple possible paths for config
     config_paths = [
+        'configs/pipeline_config.json',
         'configs/db_config.yaml',
+        '../configs/pipeline_config.json',
         '../configs/db_config.yaml',
+        '../../configs/pipeline_config.json',
         '../../configs/db_config.yaml'
     ]
     
     cfg = None
     for path in config_paths:
         if os.path.exists(path):
-            cfg = yaml.safe_load(open(path))
+            if path.endswith('.json'):
+                with open(path, 'r') as f:
+                    cfg = json.load(f)
+            else:
+                with open(path, 'r') as f:
+                    cfg = yaml.safe_load(f)
             break
     
     if cfg:
-        MODEL_PATH = os.path.join(cfg['registry_dir'], 'model.pkl')
+        if isinstance(cfg, dict) and 'data' in cfg:
+            MODEL_PATH = os.path.join(cfg['data']['models_directory'], 'model.pkl')
+        else:
+            MODEL_PATH = 'data/models/model.pkl'
         model = joblib.load(MODEL_PATH) if os.path.exists(MODEL_PATH) else None
     else:
-        MODEL_PATH = 'data/final/model.pkl'
+        MODEL_PATH = 'data/models/model.pkl'
         model = None
         print("Warning: No config file found, using default paths")
         
 except Exception as e:
     print(f"Warning: Could not load config: {e}")
-    MODEL_PATH = 'data/final/model.pkl'
+    MODEL_PATH = 'data/models/model.pkl'
     model = None
 
 # --- Dashboard template ---
@@ -81,7 +92,17 @@ dashboard_html = """
 """
 
 # --- API Endpoints ---
-@app.get("/")
+@app.route("/health")
+def health():
+    """Health check endpoint"""
+    return jsonify({
+        "status": "healthy",
+        "service": "mlapi",
+        "timestamp": datetime.datetime.now().isoformat(),
+        "model_loaded": model is not None
+    })
+
+@app.route("/")
 def root():
     return {
         "status": "ok",
@@ -89,7 +110,17 @@ def root():
         "model_loaded": model is not None
     }
 
-@app.post("/predict")
+@app.route("/dashboard")
+def dashboard():
+    """Dashboard HTML page"""
+    return render_template_string(
+        dashboard_html,
+        model_loaded=model is not None,
+        now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        year=datetime.datetime.now().year
+    )
+
+@app.route("/predict", methods=["POST"])
 def predict():
     j = request.get_json(force=True, silent=True) or {}
     t = float(j.get("timestamp", 0.0))
@@ -98,34 +129,40 @@ def predict():
     y = float(model.predict([[t]])[0])
     return jsonify({"pred": y})
 
-
-@app.get("/health")
-def health():
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "mlapi", "timestamp": datetime.datetime.now().isoformat()}
-
-# --- Dashboard routes ---
-@app.get("/dashboard")
-def dashboard():
-    return render_template_string(
-        dashboard_html,
-        model_loaded=(model is not None),
-        now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        pred=None,
-        year=datetime.datetime.now().year
-    )
-
-@app.post("/test_predict")
+@app.route("/test_predict", methods=["POST"])
 def test_predict():
-    t = float(request.form.get("timestamp", 0.0))
-    y = 0.0 if model is None else float(model.predict([[t]])[0])
-    return render_template_string(
-        dashboard_html,
-        model_loaded=(model is not None),
-        now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        pred=y,
-        year=datetime.datetime.now().year
-    )
+    """Test prediction endpoint for dashboard"""
+    timestamp = request.form.get("timestamp")
+    if not timestamp:
+        return jsonify({"error": "No timestamp provided"})
+    
+    try:
+        t = float(timestamp)
+        if model is None:
+            return jsonify({"pred": 0.0, "note": "no model yet"})
+        y = float(model.predict([[t]])[0])
+        return jsonify({"pred": y})
+    except ValueError:
+        return jsonify({"error": "Invalid timestamp format"})
+
+@app.route("/model_info")
+def model_info():
+    """Get information about the loaded model"""
+    if model is None:
+        return jsonify({
+            "status": "no_model",
+            "message": "No model loaded"
+        })
+    
+    return jsonify({
+        "status": "model_loaded",
+        "model_path": MODEL_PATH,
+        "model_type": str(type(model)),
+        "features": getattr(model, 'n_features_in_', 'unknown'),
+        "last_updated": datetime.datetime.fromtimestamp(
+            os.path.getmtime(MODEL_PATH)
+        ).isoformat() if os.path.exists(MODEL_PATH) else None
+    })
 
 # OKR API endpoints
 @app.get("/api/okrs")

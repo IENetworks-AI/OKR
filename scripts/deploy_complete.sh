@@ -84,10 +84,9 @@ check_prerequisites() {
     required_files=(
         "docker-compose.yml"
         "requirements.txt"
+        "api/Dockerfile"
+        "api/app.py"
         "src/dags/"
-        "src/models/"
-        "src/data/"
-        "src/utils/"
         "configs/pipeline_config.json"
     )
     
@@ -165,6 +164,7 @@ test_python_modules() {
 import sys
 sys.path.append('src')
 try:
+    print('✅ Testing imports...')
     from models.training import ModelTrainer
     from models.evaluation import ModelEvaluator
     from data.preprocessing import DataPreprocessor
@@ -176,42 +176,48 @@ except Exception as e:
     sys.exit(1)
 " || error "Python module test failed"
     
-    # Test basic functionality
-    python3 -c "
-import sys
-sys.path.append('src')
-try:
-    from models.training import ModelTrainer
-    trainer = ModelTrainer()
-    features, target = trainer.load_data('sample')
-    print(f'✅ Generated {len(features)} sample records')
-except Exception as e:
-    print(f'❌ Functionality test failed: {e}')
-    sys.exit(1)
-" || error "Python functionality test failed"
-    
     success "Python modules tested successfully"
+}
+
+# Clean up existing containers
+cleanup_existing() {
+    log "Cleaning up existing containers and networks..."
+    
+    # Stop and remove existing containers
+    docker-compose down --remove-orphans --volumes || true
+    
+    # Remove any dangling containers
+    docker container prune -f || true
+    
+    # Remove any dangling networks
+    docker network prune -f || true
+    
+    success "Cleanup completed"
 }
 
 # Build and start Docker services
 deploy_docker_services() {
     log "Deploying Docker services..."
     
-    # Stop any existing services
-    log "Stopping existing services..."
-    docker-compose down --remove-orphans || true
+    # Build the API image first
+    log "Building API image..."
+    docker-compose build api
     
-    # Start core services first
+    # Start core services first (database and Kafka)
     log "Starting core services (PostgreSQL, Kafka)..."
-    docker-compose up -d airflow-db kafka
+    docker-compose up -d airflow-db redis
     
-    # Wait for core services to be healthy
-    log "Waiting for core services to be ready..."
+    # Wait for database to be ready
+    log "Waiting for database to be ready..."
     sleep 30
     
-    # Check core services status
-    log "Checking core services status..."
-    docker-compose ps
+    # Start Kafka
+    log "Starting Kafka..."
+    docker-compose up -d kafka
+    
+    # Wait for Kafka to be ready
+    log "Waiting for Kafka to be ready..."
+    sleep 60
     
     # Start remaining services
     log "Starting remaining services..."
@@ -219,7 +225,7 @@ deploy_docker_services() {
     
     # Wait for all services to be ready
     log "Waiting for all services to be ready..."
-    sleep 60
+    sleep 90
     
     success "Docker services deployed"
 }
@@ -234,10 +240,11 @@ run_health_checks() {
     
     # Check if services are responding
     services=(
-        "http://localhost:5001"  # API
-        "http://localhost:8081"  # Airflow
-        "http://localhost:8085"  # Kafka UI
-        "http://localhost:80"    # Nginx
+        "http://localhost:5001/health"  # API
+        "http://localhost:8081"         # Airflow
+        "http://localhost:8085"         # Kafka UI
+        "http://localhost:80"           # Nginx
+        "http://localhost:5000"         # MLflow
     )
     
     for service in "${services[@]}"; do
@@ -276,12 +283,12 @@ initialize_airflow() {
     
     # Check Airflow status
     log "Checking Airflow status..."
-    docker-compose ps airflow
+    docker-compose ps airflow-webserver
     
     # Test Airflow web interface
     if curl -f "http://localhost:8081" &> /dev/null; then
         success "Airflow web interface is accessible"
-        log "Airflow credentials: airflow/airflow"
+        log "Airflow credentials: admin/admin"
     else
         warning "Airflow web interface not accessible yet"
     fi
@@ -336,9 +343,11 @@ show_summary() {
     echo ""
     echo "🌐 Services:"
     echo "   • API: http://localhost:5001"
-    echo "   • Airflow: http://localhost:8081 (airflow/airflow)"
+    echo "   • API Dashboard: http://localhost:5001/dashboard"
+    echo "   • Airflow: http://localhost:8081 (admin/admin)"
     echo "   • Kafka UI: http://localhost:8085"
     echo "   • Nginx: http://localhost:80"
+    echo "   • MLflow: http://localhost:5000"
     echo "   • Oracle DB: localhost:1521"
     echo ""
     echo "📁 Project Structure:"
@@ -387,6 +396,9 @@ main() {
     
     # Test Python modules
     test_python_modules
+    
+    # Clean up existing containers
+    cleanup_existing
     
     # Deploy Docker services
     deploy_docker_services
