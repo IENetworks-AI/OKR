@@ -83,31 +83,31 @@ services:
     networks:
       - okr_net
 
-  # Kafka demo producer
-  producer:
-    build:
-      context: .
-      dockerfile: kafka_pipeline/producers/Dockerfile
-    container_name: okr_producer
-    depends_on:
-      kafka:
-        condition: service_healthy
-    restart: "no"
-    networks:
-      - okr_net
+  # Kafka demo producer (commented out - using new streaming module)
+  # producer:
+  #   build:
+  #     context: .
+  #     dockerfile: kafka_pipeline/producers/Dockerfile
+  #   container_name: okr_producer
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
+  #   restart: "no"
+  #   networks:
+  #     - okr_net
 
-  # Kafka demo consumer
-  consumer:
-    build:
-      context: .
-      dockerfile: kafka_pipeline/consumers/Dockerfile
-    container_name: okr_consumer
-    depends_on:
-      kafka:
-        condition: service_healthy
-    restart: always
-    networks:
-      - okr_net
+  # Kafka demo consumer (commented out - using new streaming module)
+  # consumer:
+  #   build:
+  #     context: .
+  #     dockerfile: kafka_pipeline/consumers/Dockerfile
+  #   container_name: okr_consumer
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
+  #   restart: always
+  #   networks:
+  #     - okr_net
 
   # PostgreSQL for Airflow metadata
   airflow-db:
@@ -147,7 +147,7 @@ services:
       - PIP_ADDITIONAL_REQUIREMENTS=joblib scikit-learn pandas pyyaml numpy
     user: "50000:0"
     volumes:
-      - ./airflow_dags/dags:/opt/airflow/dags
+      - ./src/dags:/opt/airflow/dags
       - ./requirements.txt:/requirements.txt
       - ./airflow-init.sh:/airflow-init.sh
     entrypoint: ["/bin/bash"]
