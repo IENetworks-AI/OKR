@@ -172,7 +172,7 @@ def test_kafka():
     try:
         # Check if Kafka is running
         import subprocess
-        result = subprocess.run(['curl', '-s', 'localhost:9092'], 
+        result = subprocess.run(['curl', '-s', 'kafka:9092'], 
                               capture_output=True, text=True, timeout=5)
         
         if result.returncode == 0:
@@ -188,7 +188,7 @@ def test_airflow():
     try:
         # Check if Airflow is running
         import subprocess
-        result = subprocess.run(['curl', '-s', 'localhost:8080'], 
+        result = subprocess.run(['curl', '-s', 'airflow:8080'], 
                               capture_output=True, text=True, timeout=5)
         
         if result.returncode == 0:

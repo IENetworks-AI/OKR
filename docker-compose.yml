@@ -1,12 +1,12 @@
 services:
-  # Flask API
+  # Flask API running on port 5001
   api:
     build:
       context: .
       dockerfile: api/Dockerfile
     container_name: okr_api
     ports:
-      - "0.0.0.0:5001:5001"  # Bind to all interfaces
+      - "5001:5001"
     volumes:
       - ./:/app
     depends_on:
@@ -32,7 +32,7 @@ services:
       - api
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost/health >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -92,7 +92,7 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-    restart: always
+    restart: "no"
     networks:
       - okr_net
 

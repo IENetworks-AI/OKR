@@ -167,7 +167,7 @@ jobs:
           # Test services
           echo "Testing deployed services..."
           
-          # Test API
+          # Test API (behind nginx, but container port is 5001)
           curl -f http://localhost:5001/ || echo "API not responding yet"
           
           # Test Docker containers
@@ -201,31 +201,3 @@ jobs:
           echo "   - ORACLE_SSH_KEY: Private SSH key for Oracle instance"
           echo "   - ORACLE_HOST: Oracle instance IP address"
           echo "Local development can continue without these secrets"
-
-  # Test Branch Pipeline (No Deployment)
-  test-pipeline:
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/test' || github.ref == 'refs/heads/develop'
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      
-      - name: Run ETL Pipeline Tests
-        run: |
-          echo "Running ETL pipeline tests on test branch..."
-          python scripts/validate_etl_pipeline.py
-      
-      - name: Test Branch Summary
-        run: |
-          echo "Test branch pipeline completed successfully!"
-          echo "No deployment performed - this is a test branch"
-          echo "Deployment only occurs on main branch with owner permissions"

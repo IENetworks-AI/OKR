@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Copy the entire project
 COPY . /app
 
-# Expose Flask port
+# Expose API port
 EXPOSE 5001
 
 ENV FLASK_ENV=production

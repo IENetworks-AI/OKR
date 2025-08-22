@@ -1,8 +1,4 @@
-# Kafka Configuration for OKR Project
-# Internal access (within Docker network)
 bootstrap_servers: okr_kafka:9092
-# External access (from outside Docker)
-external_bootstrap_servers: localhost:9094
 topic: ai-data
 group_id: ai-consumer
 
