@@ -6,15 +6,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
+# Copy requirements first for better caching
+COPY api/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
+# Copy the entire project
 COPY . /app
 
 # Expose Flask port
 EXPOSE 5001
 
 ENV FLASK_ENV=production
+ENV FLASK_APP=api/app.py
 
-CMD ["python", "api/app.py", "--host", "0.0.0.0", "--port", "5001"]
+# Use gunicorn for production
+CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "4", "api.app:app"]
 

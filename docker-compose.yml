@@ -6,7 +6,7 @@ services:
       dockerfile: api/Dockerfile
     container_name: okr_api
     ports:
-      - "5001:5001"
+      - "0.0.0.0:5001:5001"  # Bind to all interfaces
     volumes:
       - ./:/app
     depends_on:
@@ -25,7 +25,7 @@ services:
     image: nginx:1.25-alpine
     container_name: okr_nginx
     ports:
-      - "80:80"
+      - "0.0.0.0:80:80"  # Bind to all interfaces
     volumes:
       - ./deploy/nginx/mlapi.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
@@ -48,15 +48,17 @@ services:
       - KAFKA_KRAFT_MODE=yes
       - KAFKA_CFG_PROCESS_ROLES=broker,controller
       - KAFKA_CFG_NODE_ID=1
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://0.0.0.0:9094
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
       - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
       - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
       - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
       - ALLOW_PLAINTEXT_LISTENER=yes
     ports:
-      - "9092:9092"
+      - "0.0.0.0:9092:9092"  # Internal listener
+      - "0.0.0.0:9094:9094"  # External listener
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "/opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list || exit 1"]
@@ -70,7 +72,7 @@ services:
     image: provectuslabs/kafka-ui:latest
     container_name: okr_kafka_ui
     ports:
-      - "8085:8080"
+      - "0.0.0.0:8085:8080"  # Bind to all interfaces
     environment:
       - KAFKA_CLUSTERS_0_NAME=okr
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
@@ -137,6 +139,11 @@ services:
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
       - AIRFLOW__CORE__FERNET_KEY=30e6QztCFtuew7bCiQUZiomQd0eq2eWwHf39LaQyBaU=
       - AIRFLOW__WEBSERVER__SECRET_KEY=supersecret
+      - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=true
+      - AIRFLOW__WEBSERVER__RBAC=true
+      - AIRFLOW__WEBSERVER__AUTHENTICATE=true
+      - AIRFLOW__WEBSERVER__AUTH_BACKEND=airflow.auth.backend.basic_auth
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - PIP_ADDITIONAL_REQUIREMENTS=joblib scikit-learn pandas pyyaml numpy
     user: "50000:0"
     volumes:
@@ -146,12 +153,12 @@ services:
     entrypoint: ["/bin/bash"]
     command: ["/airflow-init.sh"]
     ports:
-      - "8081:8080"
+      - "0.0.0.0:8081:8080"  # Bind to all interfaces
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 10
     networks:
       - okr_net
@@ -163,8 +170,8 @@ services:
     environment:
       - ORACLE_PASSWORD=oracle
     ports:
-      - "1521:1521"
-      - "5500:5500"
+      - "0.0.0.0:1521:1521"  # Bind to all interfaces
+      - "0.0.0.0:5500:5500"  # Bind to all interfaces
     restart: always
     networks:
       - okr_net

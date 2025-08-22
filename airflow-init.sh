@@ -1,30 +1,62 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
 
-# Optional requirements
-if [ -f /requirements.txt ]; then
-  pip install --no-cache-dir -r /requirements.txt || true
+# Enhanced Airflow Initialization Script for OKR Project
+# This script sets up Airflow with proper configuration for external access
+
+set -e
+
+echo "=== Starting Airflow Initialization ==="
+
+# Wait for database to be ready
+echo "Waiting for PostgreSQL database to be ready..."
+sleep 10
+
+# Initialize Airflow database
+echo "Initializing Airflow database..."
+airflow db init
+
+# Create admin user for external access
+echo "Creating admin user..."
+airflow users create \
+    --username admin \
+    --firstname Admin \
+    --lastname User \
+    --role Admin \
+    --email admin@okr-project.com \
+    --password admin
+
+# Set up connections (if needed)
+echo "Setting up Airflow connections..."
+
+# Start Airflow webserver and scheduler
+echo "Starting Airflow services..."
+airflow webserver --port 8080 --hostname 0.0.0.0 &
+airflow scheduler &
+
+# Wait for services to start
+echo "Waiting for Airflow services to start..."
+sleep 15
+
+# Check if services are running
+echo "Checking Airflow service status..."
+if pgrep -f "airflow webserver" > /dev/null; then
+    echo "✓ Airflow webserver is running"
+else
+    echo "✗ Airflow webserver failed to start"
+    exit 1
 fi
 
-# Ensure extra libs
-pip install --no-cache-dir psycopg2-binary || true
+if pgrep -f "airflow scheduler" > /dev/null; then
+    echo "✓ Airflow scheduler is running"
+else
+    echo "✗ Airflow scheduler failed to start"
+    exit 1
+fi
 
-# Wait for DB
-until pg_isready -h airflow-db -U airflow -d airflow; do
-  echo "Waiting for airflow-db..."
-  sleep 2
-done
+echo "=== Airflow Initialization Completed Successfully ==="
+echo "Web UI available at: http://0.0.0.0:8080"
+echo "Username: admin"
+echo "Password: admin"
 
-# Init DB and user
-airflow db init
-airflow users create \
-  --username admin \
-  --password admin \
-  --firstname Admin \
-  --lastname User \
-  --role Admin \
-  --email admin@example.com || true
-
-# Start services
-airflow webserver -p 8080 &
-exec airflow scheduler
+# Keep the script running
+tail -f /dev/null

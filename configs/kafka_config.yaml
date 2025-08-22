@@ -1,3 +1,21 @@
+# Kafka Configuration for OKR Project
+# Internal access (within Docker network)
 bootstrap_servers: okr_kafka:9092
+# External access (from outside Docker)
+external_bootstrap_servers: localhost:9094
 topic: ai-data
 group_id: ai-consumer
+
+# Producer configuration
+producer_config:
+  retries: 5
+  linger_ms: 10
+  batch_size: 16384
+  buffer_memory: 33554432
+
+# Consumer configuration
+consumer_config:
+  auto_offset_reset: earliest
+  enable_auto_commit: true
+  auto_commit_interval_ms: 1000
+  session_timeout_ms: 30000
