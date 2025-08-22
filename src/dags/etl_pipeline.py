@@ -120,7 +120,8 @@ def load_data(**context):
         processed_data_file = ti.xcom_pull(task_ids='transform_data', key='processed_data_file')
         
         if not processed_data_file or not os.path.exists(processed_data_file):
-            raise Exception("Processed data file not found")
+            raise Exception("ProcesContainer okr_kafka  Error
+Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint okr_api (4dc16d491cc010a6ab363bad224b66fbf8816bf3f4a664732d56b7fb6b3d49c9): failed to bind host port for 0.0.0.0:5001:172.18.0.5:5001/tcp: address already in usesed data file not found")
         
         # Load processed data
         df = load_dataframe(processed_data_file)
@@ -133,7 +134,8 @@ def load_data(**context):
         timestamp = generate_timestamp()
         final_data_file = f"{final_dir}/okr_data_final_{timestamp}.csv"
         save_dataframe(df, final_data_file)
-        
+        Container okr_kafka  Error
+Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint okr_api (4dc16d491cc010a6ab363bad224b66fbf8816bf3f4a664732d56b7fb6b3d49c9): failed to bind host port for 0.0.0.0:5001:172.18.0.5:5001/tcp: address already in use
         # Also save as latest version
         latest_file = f"{final_dir}/okr_data_latest.csv"
         save_dataframe(df, latest_file)
