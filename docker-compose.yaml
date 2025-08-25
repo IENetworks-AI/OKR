@@ -1,0 +1,18 @@
+name: okr-mlops
+
+services: {}
+
+networks:
+  backend:
+    driver: bridge
+  proxy:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  minio_data:
+  mlflow_db_data:
+  kafka_data:
+  airflow_data:
+  rag_data:
+
