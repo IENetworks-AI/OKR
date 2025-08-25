@@ -7,39 +7,39 @@ app = Flask(__name__)
 try:
     # Try multiple possible paths for config
     config_paths = [
-        'configs/pipeline_config.json',
-        'configs/db_config.yaml',
-        '../configs/pipeline_config.json',
-        '../configs/db_config.yaml',
-        '../../configs/pipeline_config.json',
-        '../../configs/db_config.yaml'
+        "configs/pipeline_config.json",
+        "configs/db_config.yaml",
+        "../configs/pipeline_config.json",
+        "../configs/db_config.yaml",
+        "../../configs/pipeline_config.json",
+        "../../configs/db_config.yaml",
     ]
-    
+
     cfg = None
     for path in config_paths:
         if os.path.exists(path):
-            if path.endswith('.json'):
-                with open(path, 'r') as f:
+            if path.endswith(".json"):
+                with open(path, "r") as f:
                     cfg = json.load(f)
             else:
-                with open(path, 'r') as f:
+                with open(path, "r") as f:
                     cfg = yaml.safe_load(f)
             break
-    
+
     if cfg:
-        if isinstance(cfg, dict) and 'data' in cfg:
-            MODEL_PATH = os.path.join(cfg['data']['models_directory'], 'model.pkl')
+        if isinstance(cfg, dict) and "data" in cfg:
+            MODEL_PATH = os.path.join(cfg["data"]["models_directory"], "model.pkl")
         else:
-            MODEL_PATH = 'data/models/model.pkl'
+            MODEL_PATH = "data/models/model.pkl"
         model = joblib.load(MODEL_PATH) if os.path.exists(MODEL_PATH) else None
     else:
-        MODEL_PATH = 'data/models/model.pkl'
+        MODEL_PATH = "data/models/model.pkl"
         model = None
         print("Warning: No config file found, using default paths")
-        
+
 except Exception as e:
     print(f"Warning: Could not load config: {e}")
-    MODEL_PATH = 'data/models/model.pkl'
+    MODEL_PATH = "data/models/model.pkl"
     model = None
 
 # --- Dashboard template ---
@@ -91,24 +91,25 @@ dashboard_html = """
 </html>
 """
 
+
 # --- API Endpoints ---
 @app.route("/health")
 def health():
     """Health check endpoint"""
-    return jsonify({
-        "status": "healthy",
-        "service": "mlapi",
-        "timestamp": datetime.datetime.now().isoformat(),
-        "model_loaded": model is not None
-    })
+    return jsonify(
+        {
+            "status": "healthy",
+            "service": "mlapi",
+            "timestamp": datetime.datetime.now().isoformat(),
+            "model_loaded": model is not None,
+        }
+    )
+
 
 @app.route("/")
 def root():
-    return {
-        "status": "ok",
-        "service": "mlapi",
-        "model_loaded": model is not None
-    }
+    return {"status": "ok", "service": "mlapi", "model_loaded": model is not None}
+
 
 @app.route("/dashboard")
 def dashboard():
@@ -117,8 +118,9 @@ def dashboard():
         dashboard_html,
         model_loaded=model is not None,
         now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        year=datetime.datetime.now().year
+        year=datetime.datetime.now().year,
     )
+
 
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -129,13 +131,14 @@ def predict():
     y = float(model.predict([[t]])[0])
     return jsonify({"pred": y})
 
+
 @app.route("/test_predict", methods=["POST"])
 def test_predict():
     """Test prediction endpoint for dashboard"""
     timestamp = request.form.get("timestamp")
     if not timestamp:
         return jsonify({"error": "No timestamp provided"})
-    
+
     try:
         t = float(timestamp)
         if model is None:
@@ -145,24 +148,29 @@ def test_predict():
     except ValueError:
         return jsonify({"error": "Invalid timestamp format"})
 
+
 @app.route("/model_info")
 def model_info():
     """Get information about the loaded model"""
     if model is None:
-        return jsonify({
-            "status": "no_model",
-            "message": "No model loaded"
-        })
-    
-    return jsonify({
-        "status": "model_loaded",
-        "model_path": MODEL_PATH,
-        "model_type": str(type(model)),
-        "features": getattr(model, 'n_features_in_', 'unknown'),
-        "last_updated": datetime.datetime.fromtimestamp(
-            os.path.getmtime(MODEL_PATH)
-        ).isoformat() if os.path.exists(MODEL_PATH) else None
-    })
+        return jsonify({"status": "no_model", "message": "No model loaded"})
+
+    return jsonify(
+        {
+            "status": "model_loaded",
+            "model_path": MODEL_PATH,
+            "model_type": str(type(model)),
+            "features": getattr(model, "n_features_in_", "unknown"),
+            "last_updated": (
+                datetime.datetime.fromtimestamp(
+                    os.path.getmtime(MODEL_PATH)
+                ).isoformat()
+                if os.path.exists(MODEL_PATH)
+                else None
+            ),
+        }
+    )
+
 
 # OKR API endpoints
 @app.get("/api/okrs")
@@ -171,21 +179,22 @@ def get_okrs():
     try:
         # Try multiple possible paths for data file
         data_paths = [
-            'data/raw/sample_okr_data.json',
-            '../data/raw/sample_okr_data.json',
-            '../../data/raw/sample_okr_data.json'
+            "data/raw/sample_okr_data.json",
+            "../data/raw/sample_okr_data.json",
+            "../../data/raw/sample_okr_data.json",
         ]
-        
+
         for data_file in data_paths:
             if os.path.exists(data_file):
-                with open(data_file, 'r') as f:
+                with open(data_file, "r") as f:
                     okr_data = json.load(f)
                 return jsonify(okr_data)
-        
+
         # Return empty array if no data file found
         return jsonify([])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @app.post("/api/generate-sample-data")
 def generate_sample_data():
@@ -193,15 +202,31 @@ def generate_sample_data():
     try:
         # Run the sample data generator script
         import subprocess
-        result = subprocess.run(['python3', 'scripts/generate_sample_data.py'], 
-                              capture_output=True, text=True, cwd='..')
-        
+
+        result = subprocess.run(
+            ["python3", "scripts/generate_sample_data.py"],
+            capture_output=True,
+            text=True,
+            cwd="..",
+        )
+
         if result.returncode == 0:
-            return jsonify({"message": "Sample data generated successfully", "output": result.stdout})
+            return jsonify(
+                {
+                    "message": "Sample data generated successfully",
+                    "output": result.stdout,
+                }
+            )
         else:
-            return jsonify({"error": "Failed to generate sample data", "stderr": result.stderr}), 500
+            return (
+                jsonify(
+                    {"error": "Failed to generate sample data", "stderr": result.stderr}
+                ),
+                500,
+            )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @app.get("/api/test-kafka")
 def test_kafka():
@@ -209,15 +234,20 @@ def test_kafka():
     try:
         # Check if Kafka is running
         import subprocess
-        result = subprocess.run(['curl', '-s', 'kafka:9092'], 
-                              capture_output=True, text=True, timeout=5)
-        
+
+        result = subprocess.run(
+            ["curl", "-s", "kafka:9092"], capture_output=True, text=True, timeout=5
+        )
+
         if result.returncode == 0:
             return jsonify({"message": "Kafka is running", "status": "healthy"})
         else:
-            return jsonify({"message": "Kafka is not responding", "status": "unhealthy"})
+            return jsonify(
+                {"message": "Kafka is not responding", "status": "unhealthy"}
+            )
     except Exception as e:
         return jsonify({"message": f"Kafka test failed: {str(e)}", "status": "error"})
+
 
 @app.get("/api/test-airflow")
 def test_airflow():
@@ -225,27 +255,34 @@ def test_airflow():
     try:
         # Check if Airflow is running
         import subprocess
-        result = subprocess.run(['curl', '-s', 'airflow:8080'], 
-                              capture_output=True, text=True, timeout=5)
-        
+
+        result = subprocess.run(
+            ["curl", "-s", "airflow:8080"], capture_output=True, text=True, timeout=5
+        )
+
         if result.returncode == 0:
             return jsonify({"message": "Airflow is running", "status": "healthy"})
         else:
-            return jsonify({"message": "Airflow is not responding", "status": "unhealthy"})
+            return jsonify(
+                {"message": "Airflow is not responding", "status": "unhealthy"}
+            )
     except Exception as e:
         return jsonify({"message": f"Airflow test failed: {str(e)}", "status": "error"})
 
+
 if __name__ == "__main__":
     import argparse
-    
-    parser = argparse.ArgumentParser(description='OKR Flask API')
-    parser.add_argument('--port', type=int, default=5001, help='Port to run the server on')
-    parser.add_argument('--host', type=str, default='0.0.0.0', help='Host to bind to')
-    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
-    
+
+    parser = argparse.ArgumentParser(description="OKR Flask API")
+    parser.add_argument(
+        "--port", type=int, default=5001, help="Port to run the server on"
+    )
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to bind to")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+
     args = parser.parse_args()
-    
+
     print(f"🚀 Starting OKR API on {args.host}:{args.port}")
     print(f"📊 Dashboard available at: http://{args.host}:{args.port}/dashboard")
-    
+
     app.run(host=args.host, port=args.port, debug=args.debug)
