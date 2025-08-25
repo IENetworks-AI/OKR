@@ -1,4 +1,31 @@
 {
+  "raw_glob": "data/raw/*.csv",
+  "csv_read_options": {
+    "encoding": "utf-8",
+    "errors": "replace",
+    "delimiter": ",",
+    "quotechar": "\"",
+    "escapechar": null
+  },
+  "chunking": {
+    "max_tokens": 512,
+    "overlap": 64
+  },
+  "db_names": {
+    "raw": "okr_raw",
+    "processed": "okr_processed",
+    "curated": "okr_curated"
+  },
+  "kafka": {
+    "bootstrap_servers": "kafka:9092",
+    "topics": {
+      "raw_ingest": "okr_raw_ingest",
+      "processed_updates": "okr_processed_updates"
+    }
+  }
+}
+
+{
   "pipeline": {
     "name": "OKR ML Pipeline",
     "version": "2.0.0",
