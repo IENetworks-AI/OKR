@@ -169,3 +169,40 @@ For issues and questions:
    - `https://your-domain/` (reverse-proxied API and dashboard)
    - `https://your-domain/api/...`
 5. Optional: Add TLS via a reverse proxy or Certbot container (not included by default).
+
+## 📥 Data Ingestion & ETL Quickstart
+
+1. Start stack and initialize Airflow:
+```bash
+docker-compose up -d --build
+docker exec -it okr_airflow_webserver bash -lc "airflow dags list | cat"
+```
+
+2. Place CSVs in `data/raw/` (mounted into Airflow at `/opt/airflow/data/raw`).
+
+3. Trigger DAG `okr_ingestion_etl` via UI (http://localhost:8081) or CLI:
+```bash
+docker exec -it okr_airflow_webserver bash -lc "airflow dags trigger okr_ingestion_etl"
+```
+
+4. Verify Postgres tables (inside Airflow DB container has psql client if installed) or use any client with env in `.env.example`:
+```sql
+-- okr_raw
+SELECT COUNT(*) FROM public.records;
+-- okr_processed
+SELECT COUNT(*) FROM public.records_clean;
+-- okr_curated
+SELECT COUNT(*) FROM public.documents;
+```
+
+5. Kafka events:
+```bash
+# Using container shell (Bitnami Kafka has CLI tools)
+docker exec -it okr_kafka bash -lc "/opt/bitnami/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic okr_raw_ingest --from-beginning --timeout-ms 5000 | cat"
+docker exec -it okr_kafka bash -lc "/opt/bitnami/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic okr_processed_updates --from-beginning --timeout-ms 5000 | cat"
+```
+
+6. Local debug without Airflow:
+```bash
+python scripts/etl_cli.py run-once --glob "data/raw/*.csv"
+```

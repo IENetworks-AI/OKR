@@ -10,7 +10,7 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.impute import SimpleImputer
 import logging
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, Iterable, List
 import os
 from datetime import datetime
 
@@ -116,3 +116,108 @@ class DataPreprocessor:
         
         logger.info("Data preprocessing pipeline completed successfully")
         return df_scaled, target
+
+
+# ---------------- New ingestion/ETL helpers ---------------- #
+def read_csv_to_json_rows(path: str) -> Iterable[dict]:
+    """Read a CSV file and yield each row as a JSON-serializable dict.
+    Preserves original types where possible.
+    """
+    try:
+        df = pd.read_csv(path, dtype=str, keep_default_na=False)
+        for _, row in df.iterrows():
+            yield {k: _coerce_value(v) for k, v in row.to_dict().items()}
+    except Exception as e:
+        logger.error(f"read_csv_to_json_rows failed for {path}: {e}")
+        raise
+
+
+def _coerce_value(val: Any) -> Any:
+    if val is None:
+        return None
+    s = str(val)
+    if s == "":
+        return None
+    # Try numeric
+    try:
+        if "." in s:
+            return float(s)
+        return int(s)
+    except Exception:
+        pass
+    # Try boolean
+    low = s.lower()
+    if low in {"true", "false"}:
+        return low == "true"
+    return s
+
+
+def validate_and_clean(row: dict) -> Tuple[dict, bool]:
+    """Apply minimal validation rules and return cleaned row and validity.
+    Ensures a non-empty text field if present, trims strings, and keeps within simple ranges.
+    """
+    cleaned = {}
+    valid = True
+    rejected_reason = []
+    for k, v in row.items():
+        if isinstance(v, str):
+            v = v.strip()
+        cleaned[k] = v
+
+    text_fields = [f for f in cleaned.keys() if f.lower() in {"text", "description", "content", "objective"}]
+    if text_fields:
+        text_val = " ".join([str(cleaned.get(f, "")).strip() for f in text_fields]).strip()
+        if not text_val:
+            valid = False
+            rejected_reason.append("empty_text")
+
+    # Example range checks if present
+    if "progress" in cleaned:
+        try:
+            p = float(cleaned["progress"]) if cleaned["progress"] is not None else None
+            if p is not None and not (0.0 <= p <= 100.0):
+                valid = False
+                rejected_reason.append("progress_out_of_range")
+        except Exception:
+            valid = False
+            rejected_reason.append("progress_not_numeric")
+
+    cleaned["rejected_reason"] = ",".join(rejected_reason) if rejected_reason else None
+    return cleaned, valid
+
+
+def to_model_json(clean_row: dict) -> dict:
+    """Convert a cleaned row to model JSON schema: {text, labels?, meta}.
+    Heuristic: build text from common text fields; include remaining as meta.
+    """
+    text_parts = []
+    for key in ["text", "description", "content", "objective", "notes"]:
+        val = clean_row.get(key)
+        if val:
+            text_parts.append(str(val))
+    if not text_parts:
+        # Fallback to join all string-like fields
+        text_parts = [str(v) for k, v in clean_row.items() if isinstance(v, str)]
+    text = "\n".join(text_parts).strip()
+
+    labels = clean_row.get("label") or clean_row.get("labels")
+    meta = {k: v for k, v in clean_row.items() if k not in {"label", "labels"}}
+    return {"text": text, "labels": labels, "meta": meta}
+
+
+def chunk_text(text: str, max_tokens: int = 512, overlap: int = 64) -> List[str]:
+    """Heuristic chunker, token-agnostic: operate on words approximating tokens.
+    """
+    if not text:
+        return []
+    words = text.split()
+    if max_tokens <= 0:
+        return [text]
+    chunks = []
+    i = 0
+    step = max(1, max_tokens - overlap)
+    while i < len(words):
+        chunk = " ".join(words[i : i + max_tokens])
+        chunks.append(chunk)
+        i += step
+    return chunks

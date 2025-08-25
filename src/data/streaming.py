@@ -6,6 +6,7 @@ data ingestion and processing in the ML pipeline.
 """
 
 import json
+import os
 import logging
 from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime
@@ -157,6 +158,65 @@ class KafkaStreamManager:
             
         except Exception as e:
             logger.error(f"Error closing Kafka connections: {e}")
+
+
+# ---------------- New lightweight helpers and CLI ---------------- #
+def get_producer() -> KafkaProducer:
+    servers = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'kafka:9092')
+    try:
+        producer = KafkaProducer(
+            bootstrap_servers=servers,
+            value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+            key_serializer=lambda k: k.encode('utf-8') if k else None,
+            acks='all',
+            retries=3,
+        )
+        return producer
+    except Exception as e:
+        logger.error(f"Failed to create Kafka producer: {e}")
+        raise
+
+
+def publish(topic: str, key: str, value: Dict[str, Any]) -> bool:
+    try:
+        producer = get_producer()
+        future = producer.send(topic, key=key, value=value)
+        future.get(timeout=10)
+        producer.flush()
+        producer.close()
+        logger.info(f"Published to {topic}: key={key}")
+        return True
+    except Exception as e:
+        logger.error(f"Publish error to {topic}: {e}")
+        return False
+
+
+def _cli_publish_ingest_event(file_path: str, rows: int):
+    event = {"file": file_path, "rows": rows, "timestamp": datetime.utcnow().isoformat()}
+    publish(os.getenv('TOPIC_RAW', 'okr_raw_ingest'), key=file_path, value=event)
+
+
+def _cli_publish_processed_event(count: int):
+    event = {"count": count, "timestamp": datetime.utcnow().isoformat()}
+    publish(os.getenv('TOPIC_PROCESSED', 'okr_processed_updates'), key=str(count), value=event)
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest='cmd')
+    p1 = sub.add_parser('publish_ingest_event')
+    p1.add_argument('--file', required=True)
+    p1.add_argument('--rows', type=int, required=True)
+    p2 = sub.add_parser('publish_processed_event')
+    p2.add_argument('--count', type=int, required=True)
+    args = parser.parse_args()
+    if args.cmd == 'publish_ingest_event':
+        _cli_publish_ingest_event(args.file, args.rows)
+    elif args.cmd == 'publish_processed_event':
+        _cli_publish_processed_event(args.count)
+    else:
+        parser.print_help()
 
 class DataStreamer:
     """Handles data streaming operations"""
