@@ -1,0 +1,4 @@
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: postgres
+    profiles: ["stage3"]

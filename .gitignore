@@ -1,3 +1,36 @@
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Editors & OS
+.vscode/
+.idea/
+.DS_Store
+
+# Airflow
+airflow/logs/
+
+# Build artifacts
+dist/
+build/
+
+# MLflow local runs (we use MinIO, but ignore local anyway)
+mlruns/
+
+# Docker
+docker-compose.override.yml
+
 # Logs
 logs
 *.log
