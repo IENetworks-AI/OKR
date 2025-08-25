@@ -36,6 +36,8 @@ airflow users create \
 
 # Set up connections (if needed)
 echo "Setting up Airflow connections..."
+airflow variables set KAFKA_BOOTSTRAP_SERVERS "${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}" || true
+airflow variables set PIPELINE_CONFIG_PATH "/opt/airflow/configs/pipeline_config.json" || true
 
 # Start Airflow webserver
 echo "Starting Airflow webserver..."
