@@ -1,72 +1,119 @@
 {
-  "pipeline": {
-    "name": "OKR ML Pipeline",
-    "version": "2.0.0",
-    "description": "Modern ML pipeline with Kafka, Airflow, and MLflow"
+  "etl": {
+    "raw_data_glob": "data/raw/*.csv",
+    "batch_size": 1000,
+    "max_retries": 3,
+    "retry_delay_seconds": 60
   },
-  "data": {
-    "raw_directory": "data/raw",
-    "processed_directory": "data/processed",
-    "final_directory": "data/final",
-    "models_directory": "data/models",
-    "results_directory": "data/results",
-    "archive_directory": "data/archive"
+  "csv_reading": {
+    "encoding": "utf-8",
+    "delimiter_detection": true,
+    "max_field_size": 131072,
+    "skip_blank_lines": true,
+    "strip_whitespace": true
+  },
+  "data_validation": {
+    "required_fields": ["_row_number", "_source_file"],
+    "max_validation_errors": 10,
+    "quality_threshold": 0.7,
+    "email_validation": true,
+    "date_parsing": true,
+    "numeric_cleaning": true
+  },
+  "chunking": {
+    "max_tokens_per_chunk": 512,
+    "chunk_overlap_tokens": 64,
+    "min_chunk_size": 50,
+    "text_field_patterns": [
+      "objective", "description", "title", "summary", 
+      "notes", "comment", "details", "content", 
+      "text", "message", "feedback"
+    ]
+  },
+  "database": {
+    "raw_db": "okr_raw",
+    "processed_db": "okr_processed", 
+    "curated_db": "okr_curated",
+    "connection_pool_size": 5,
+    "connection_timeout": 30,
+    "query_timeout": 300,
+    "bulk_insert_batch_size": 1000
   },
   "kafka": {
     "bootstrap_servers": "kafka:9092",
     "topics": {
-      "okr_data": "okr_data",
-      "model_updates": "model_updates",
-      "alerts": "alerts"
+      "raw_ingest": "okr_raw_ingest",
+      "processed_updates": "okr_processed_updates"
     },
-    "consumer_group": "okr_ml_pipeline"
+    "producer_config": {
+      "acks": "all",
+      "retries": 3,
+      "retry_backoff_ms": 1000,
+      "request_timeout_ms": 30000,
+      "batch_size": 16384,
+      "linger_ms": 10
+    },
+    "consumer_config": {
+      "auto_offset_reset": "earliest",
+      "enable_auto_commit": true,
+      "session_timeout_ms": 30000,
+      "heartbeat_interval_ms": 3000
+    }
   },
   "airflow": {
-    "dag_schedule": {
-      "etl_pipeline": "0 */6 * * *",
-      "model_training": "0 0 * * *",
-      "monitoring": "0 */2 * * *"
-    },
-    "retries": 3,
-    "retry_delay_minutes": 5
+    "dag_id": "okr_ingestion_etl",
+    "schedule_interval": "@daily",
+    "max_active_runs": 1,
+    "catchup": false,
+    "retries": 2,
+    "retry_delay_minutes": 5,
+    "task_timeout_minutes": 60,
+    "sla_minutes": 120
   },
-  "mlflow": {
-    "tracking_uri": "http://localhost:5000",
-    "experiment_name": "okr_ml_experiments",
-    "artifact_location": "data/mlflow_artifacts"
+  "column_mappings": {
+    "department": ["dept", "department", "team", "division"],
+    "objective": ["objective", "goal", "target", "aim"],
+    "objective_type": ["type", "category", "classification"],
+    "priority": ["priority", "importance", "urgency"],
+    "quarter": ["quarter", "q", "period"],
+    "status": ["status", "state", "phase"],
+    "progress": ["progress", "completion", "percent", "percentage"],
+    "budget": ["budget", "cost", "funding", "allocation"],
+    "timeline_days": ["timeline", "duration", "days", "timeframe"],
+    "team_size": ["team_size", "headcount", "members", "people"]
   },
-  "model": {
-    "algorithm": "RandomForest",
-    "hyperparameters": {
-      "n_estimators": 100,
-      "max_depth": 10,
-      "random_state": 42
+  "data_quality": {
+    "checks": {
+      "null_threshold": 0.3,
+      "duplicate_threshold": 0.1,
+      "outlier_detection": true,
+      "schema_validation": true
     },
-    "evaluation_metrics": ["accuracy", "precision", "recall", "f1_score", "roc_auc"],
-    "update_threshold": 0.05
+    "numeric_ranges": {
+      "progress": {"min": 0, "max": 100},
+      "budget": {"min": 0, "max": 10000000},
+      "team_size": {"min": 1, "max": 1000},
+      "timeline_days": {"min": 1, "max": 1095}
+    },
+    "categorical_values": {
+      "priority": ["High", "Medium", "Low", "Critical"],
+      "status": ["Not Started", "In Progress", "On Track", "At Risk", "Completed", "Cancelled", "Delayed"],
+      "quarter": ["Q1", "Q2", "Q3", "Q4"]
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "json",
+    "include_timestamp": true,
+    "include_module": true,
+    "log_sql_queries": false,
+    "log_kafka_events": true
   },
   "monitoring": {
-    "quality_threshold": 0.8,
-    "performance_threshold": 0.7,
-    "alert_levels": ["info", "warning", "critical"],
-    "check_interval_hours": 2
-  },
-  "api": {
-    "host": "0.0.0.0",
-    "port": 5001,
-    "debug": false,
-    "workers": 4
-  },
-  "sources": {
-    "csv": {
-      "directory": "data/raw",
-      "pattern": "*.csv"
-    },
-    "api": {
-      "base_url": "https://api.publicapis.org",
-      "endpoint": "/entries",
-      "method": "GET",
-      "params": {}
-    }
+    "enable_metrics": true,
+    "metrics_retention_days": 30,
+    "alert_on_failures": true,
+    "alert_on_quality_issues": true,
+    "quality_score_threshold": 0.8
   }
 }

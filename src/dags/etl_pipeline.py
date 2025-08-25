@@ -1,10 +1,13 @@
 """
-ETL Pipeline DAG
+OKR ETL Pipeline DAG
 
-This DAG handles the Extract, Transform, Load pipeline for OKR data:
-- Extract data from various sources
-- Transform and clean data
-- Load processed data to storage
+This DAG handles the complete ETL pipeline for OKR data ingestion:
+- Discover CSV files in data/raw/
+- Ingest to PostgreSQL raw database
+- Validate and transform data
+- Load to processed database  
+- Generate curated JSON documents
+- Publish Kafka events
 """
 
 from airflow import DAG
@@ -13,13 +16,54 @@ from airflow.utils.dates import days_ago
 from datetime import datetime, timedelta
 import sys
 import os
+import glob
+import json
+import logging
+from typing import List, Dict, Any
 
 # Add src directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from data.preprocessing import DataPreprocessor
-from data.streaming import KafkaStreamManager, DataStreamer
-from utils.helpers import ensure_directory, generate_timestamp, save_dataframe, load_dataframe
+from data.preprocessing import (
+    read_csv_to_json_rows, validate_and_clean, to_model_json, 
+    chunk_text, calculate_file_hash, get_file_stats
+)
+from data.streaming import publish_ingest_event, publish_processed_event
+from utils.db import (
+    get_file_record, insert_file_record, insert_raw_records,
+    get_raw_records_for_processing, insert_processed_records,
+    insert_curated_documents, get_database_stats
+)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Load pipeline configuration
+def load_config():
+    """Load pipeline configuration"""
+    config_paths = [
+        '/opt/airflow/configs/pipeline_config.json',
+        '/workspace/configs/pipeline_config.json',
+        '/app/configs/pipeline_config.json',
+        'configs/pipeline_config.json'
+    ]
+    
+    for config_path in config_paths:
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.warning(f"Could not load config from {config_path}: {e}")
+    
+    # Default configuration
+    return {
+        "etl": {"raw_data_glob": "data/raw/*.csv", "batch_size": 1000},
+        "airflow": {"retries": 2, "retry_delay_minutes": 5}
+    }
+
+config = load_config()
 
 # Default arguments
 default_args = {
@@ -28,233 +72,394 @@ default_args = {
     'start_date': days_ago(1),
     'email_on_failure': False,
     'email_on_retry': False,
-    'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retries': config.get('airflow', {}).get('retries', 2),
+    'retry_delay': timedelta(minutes=config.get('airflow', {}).get('retry_delay_minutes', 5)),
 }
 
-def extract_data(**context):
-    """Extract data from various sources"""
+def discover_csvs(**context) -> List[Dict[str, Any]]:
+    """Discover CSV files in data/raw directory and calculate checksums"""
     try:
-        # Initialize Kafka manager
-        kafka_manager = KafkaStreamManager()
+        raw_data_glob = config.get('etl', {}).get('raw_data_glob', 'data/raw/*.csv')
         
-        # Create data streamer to generate sample data
-        streamer = DataStreamer(kafka_manager)
+        # Handle relative paths from Airflow context
+        if not os.path.isabs(raw_data_glob):
+            # Try common Airflow paths
+            search_paths = [
+                f'/opt/airflow/{raw_data_glob}',
+                f'/workspace/{raw_data_glob}',
+                f'/app/{raw_data_glob}',
+                raw_data_glob
+            ]
+        else:
+            search_paths = [raw_data_glob]
         
-        # Generate sample OKR data
-        sample_data = []
-        for _ in range(100):  # Generate 100 sample records
-            okr_record = streamer._generate_okr_data()
-            sample_data.append(okr_record)
+        discovered_files = []
         
-        # Convert to DataFrame
-        import pandas as pd
-        df = pd.DataFrame(sample_data)
+        for search_path in search_paths:
+            try:
+                csv_files = glob.glob(search_path)
+                if csv_files:
+                    for file_path in csv_files:
+                        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                            file_stats = get_file_stats(file_path)
+                            discovered_files.append({
+                                'path': file_path,
+                                'size': file_stats['size'],
+                                'hash': file_stats['hash'],
+                                'modified': file_stats['modified']
+                            })
+                    break  # Use first path that returns files
+            except Exception as e:
+                logger.warning(f"Could not search path {search_path}: {e}")
         
-        # Save raw data
-        timestamp = generate_timestamp()
-        raw_data_file = f"data/raw/okr_data_{timestamp}.csv"
-        save_dataframe(df, raw_data_file)
+        if not discovered_files:
+            logger.warning("No CSV files found for processing")
+            
+        # Store discovered files in XCom
+        context['task_instance'].xcom_push(key='discovered_files', value=discovered_files)
         
-        # Store file info in XCom
-        context['task_instance'].xcom_push(key='raw_data_file', value=raw_data_file)
-        context['task_instance'].xcom_push(key='raw_data_count', value=len(df))
-        
-        # Close Kafka connections
-        kafka_manager.close()
-        
-        return f"Extracted {len(df)} OKR records to {raw_data_file}"
+        logger.info(f"Discovered {len(discovered_files)} CSV files for processing")
+        return discovered_files
         
     except Exception as e:
-        raise Exception(f"Error extracting data: {e}")
+        logger.error(f"Error discovering CSV files: {e}")
+        raise
 
-def transform_data(**context):
-    """Transform and clean the extracted data"""
+def ingest_to_raw(**context):
+    """Ingest discovered CSV files to raw database"""
     try:
-        # Get raw data file from previous task
         ti = context['task_instance']
-        raw_data_file = ti.xcom_pull(task_ids='extract_data', key='raw_data_file')
+        discovered_files = ti.xcom_pull(task_ids='discover_csvs', key='discovered_files')
         
-        if not raw_data_file or not os.path.exists(raw_data_file):
-            raise Exception("Raw data file not found")
+        if not discovered_files:
+            logger.info("No files to ingest")
+            return "No files to ingest"
         
-        # Load raw data
-        df = load_dataframe(raw_data_file)
+        ingested_files = []
+        total_rows = 0
         
-        # Initialize preprocessor
-        preprocessor = DataPreprocessor()
-        
-        # Check data quality
-        quality_report = preprocessor.check_data_quality(df)
-        
-        # Preprocess data
-        df_processed, _ = preprocessor.preprocess_pipeline(df)
-        
-        # Save processed data
-        timestamp = generate_timestamp()
-        processed_data_file = f"data/processed/okr_data_processed_{timestamp}.csv"
-        save_dataframe(df_processed, processed_data_file)
-        
-        # Save quality report
-        quality_report_file = f"data/processed/quality_report_{timestamp}.json"
-        import json
-        with open(quality_report_file, 'w') as f:
-            json.dump(quality_report, f, indent=2, default=str)
+        for file_info in discovered_files:
+            file_path = file_info['path']
+            file_hash = file_info['hash']
+            
+            logger.info(f"Processing file: {file_path}")
+            
+            # Check if file already processed
+            existing_file = get_file_record(file_path, file_hash)
+            if existing_file:
+                logger.info(f"File {file_path} already processed (ID: {existing_file['file_id']})")
+                continue
+            
+            # Read CSV and convert to JSON rows
+            records = list(read_csv_to_json_rows(file_path))
+            row_count = len(records)
+            
+            if row_count == 0:
+                logger.warning(f"No records found in {file_path}")
+                continue
+            
+            # Insert file record
+            file_id = insert_file_record(
+                file_path=file_path,
+                sha256_hash=file_hash,
+                row_count=row_count,
+                file_size=file_info['size']
+            )
+            
+            # Insert raw records
+            inserted_count = insert_raw_records(file_id, records)
+            
+            # Publish Kafka event
+            publish_ingest_event(file_path, inserted_count, file_id)
+            
+            ingested_files.append({
+                'file_id': file_id,
+                'path': file_path,
+                'rows': inserted_count
+            })
+            total_rows += inserted_count
+            
+            logger.info(f"Ingested {inserted_count} records from {file_path}")
         
         # Store results in XCom
-        context['task_instance'].xcom_push(key='processed_data_file', value=processed_data_file)
-        context['task_instance'].xcom_push(key='quality_report_file', value=quality_report_file)
-        context['task_instance'].xcom_push(key='processed_data_count', value=len(df_processed))
-        context['task_instance'].xcom_push(key='quality_score', value=quality_report.get('quality_score', 0))
+        context['task_instance'].xcom_push(key='ingested_files', value=ingested_files)
+        context['task_instance'].xcom_push(key='total_ingested_rows', value=total_rows)
         
-        return f"Transformed {len(df_processed)} records. Quality score: {quality_report.get('quality_score', 0):.3f}"
+        return f"Ingested {len(ingested_files)} files with {total_rows} total records"
         
     except Exception as e:
-        raise Exception(f"Error transforming data: {e}")
+        logger.error(f"Error ingesting to raw database: {e}")
+        raise
 
-def load_data(**context):
-    """Load processed data to final storage"""
+def transform_validate(**context):
+    """Transform and validate raw records"""
     try:
-        # Get processed data file from previous task
-        ti = context['task_instance']
-        processed_data_file = ti.xcom_pull(task_ids='transform_data', key='processed_data_file')
+        # Get raw records for processing
+        raw_records = get_raw_records_for_processing(limit=config.get('etl', {}).get('batch_size', 1000))
         
-        if not processed_data_file or not os.path.exists(processed_data_file):
-            raise Exception("Processed data file not found")
+        if not raw_records:
+            logger.info("No raw records to process")
+            return "No raw records to process"
         
-        # Load processed data
-        df = load_dataframe(processed_data_file)
+        processed_records = []
+        valid_count = 0
+        invalid_count = 0
         
-        # Create final storage directory
-        final_dir = "data/final"
-        ensure_directory(final_dir)
-        
-        # Save to final storage with timestamp
-        timestamp = generate_timestamp()
-        final_data_file = f"{final_dir}/okr_data_final_{timestamp}.csv"
-        save_dataframe(df, final_data_file)
-        # Also save as latest version
-        latest_file = f"{final_dir}/okr_data_latest.csv"
-        save_dataframe(df, latest_file)
-        
-        # Create metadata file
-        metadata = {
-            'timestamp': timestamp,
-            'source_file': processed_data_file,
-            'record_count': len(df),
-            'columns': df.columns.tolist(),
-            'data_types': df.dtypes.to_dict(),
-            'processing_date': datetime.now().isoformat()
-        }
-        
-        metadata_file = f"{final_dir}/metadata_{timestamp}.json"
-        import json
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2, default=str)
+        for raw_record in raw_records:
+            try:
+                # Parse JSON payload
+                payload = raw_record['payload'] if isinstance(raw_record['payload'], dict) else json.loads(raw_record['payload'])
+                
+                # Validate and clean
+                cleaned_row, is_valid = validate_and_clean(payload)
+                
+                # Prepare processed record
+                processed_record = {
+                    'source_file_id': raw_record['file_id'],
+                    'source_row_num': raw_record['row_num'],
+                    'valid': is_valid,
+                    'original_data': payload
+                }
+                
+                # Extract structured fields from cleaned data
+                field_mappings = config.get('column_mappings', {})
+                for target_field, source_variations in field_mappings.items():
+                    for source_field in source_variations:
+                        if source_field in cleaned_row:
+                            processed_record[target_field] = cleaned_row[source_field]
+                            break
+                
+                # Add validation info
+                if not is_valid:
+                    processed_record['rejected_reason'] = '; '.join(cleaned_row.get('_validation_errors', []))
+                    invalid_count += 1
+                else:
+                    valid_count += 1
+                
+                processed_records.append(processed_record)
+                
+            except Exception as e:
+                logger.error(f"Error processing record {raw_record.get('record_id')}: {e}")
+                invalid_count += 1
+                processed_records.append({
+                    'source_file_id': raw_record['file_id'],
+                    'source_row_num': raw_record['row_num'],
+                    'valid': False,
+                    'rejected_reason': f"Processing error: {str(e)}",
+                    'original_data': raw_record.get('payload', {})
+                })
         
         # Store results in XCom
-        context['task_instance'].xcom_push(key='final_data_file', value=final_data_file)
-        context['task_instance'].xcom_push(key='latest_data_file', value=latest_file)
-        context['task_instance'].xcom_push(key='metadata_file', value=metadata_file)
-        context['task_instance'].xcom_push(key='final_record_count', value=len(df))
+        context['task_instance'].xcom_push(key='processed_records', value=len(processed_records))
+        context['task_instance'].xcom_push(key='valid_count', value=valid_count)
+        context['task_instance'].xcom_push(key='invalid_count', value=invalid_count)
+        context['task_instance'].xcom_push(key='processed_data', value=processed_records)
         
-        return f"Loaded {len(df)} records to final storage"
+        logger.info(f"Processed {len(processed_records)} records: {valid_count} valid, {invalid_count} invalid")
+        return f"Processed {len(processed_records)} records: {valid_count} valid, {invalid_count} invalid"
         
     except Exception as e:
-        raise Exception(f"Error loading data: {e}")
+        logger.error(f"Error in transform/validate: {e}")
+        raise
 
-def validate_pipeline(**context):
-    """Validate the complete ETL pipeline"""
+def load_processed(**context):
+    """Load processed records to processed database"""
     try:
-        # Get results from all previous tasks
         ti = context['task_instance']
-        raw_count = ti.xcom_pull(task_ids='extract_data', key='raw_data_count')
-        processed_count = ti.xcom_pull(task_ids='transform_data', key='processed_data_count')
-        final_count = ti.xcom_pull(task_ids='load_data', key='final_record_count')
-        quality_score = ti.xcom_pull(task_ids='transform_data', key='quality_score')
+        processed_data = ti.xcom_pull(task_ids='transform_validate', key='processed_data')
         
-        # Validate pipeline
-        validation_results = {
-            'pipeline_status': 'success',
-            'raw_data_count': raw_count,
-            'processed_data_count': processed_count,
-            'final_data_count': final_count,
-            'data_loss': raw_count - final_count if raw_count and final_count else 0,
-            'quality_score': quality_score,
-            'validation_timestamp': datetime.now().isoformat()
-        }
+        if not processed_data:
+            logger.info("No processed data to load")
+            return "No processed data to load"
         
-        # Check for data loss
-        if validation_results['data_loss'] > 0:
-            validation_results['pipeline_status'] = 'warning'
-            validation_results['warnings'] = [f"Data loss detected: {validation_results['data_loss']} records"]
+        # Insert processed records
+        inserted_count = insert_processed_records(processed_data)
         
-        # Check quality score
-        if quality_score and quality_score < 0.8:
-            validation_results['pipeline_status'] = 'warning'
-            if 'warnings' not in validation_results:
-                validation_results['warnings'] = []
-            validation_results['warnings'].append(f"Low data quality score: {quality_score:.3f}")
+        # Store result in XCom
+        context['task_instance'].xcom_push(key='loaded_processed_count', value=inserted_count)
         
-        # Save validation results
-        timestamp = generate_timestamp()
-        validation_file = f"data/results/etl_validation_{timestamp}.json"
-        ensure_directory(os.path.dirname(validation_file))
-        
-        import json
-        with open(validation_file, 'w') as f:
-            json.dump(validation_results, f, indent=2, default=str)
-        
-        # Store validation results in XCom
-        context['task_instance'].xcom_push(key='validation_results', value=validation_results)
-        context['task_instance'].xcom_push(key='validation_file', value=validation_file)
-        
-        # Log validation summary
-        status = validation_results['pipeline_status']
-        summary = f"ETL Pipeline validation completed with status: {status}"
-        
-        if status == 'warning':
-            summary += f". Warnings: {len(validation_results.get('warnings', []))}"
-        
-        return summary
+        logger.info(f"Loaded {inserted_count} processed records to database")
+        return f"Loaded {inserted_count} processed records to database"
         
     except Exception as e:
-        raise Exception(f"Error validating pipeline: {e}")
+        logger.error(f"Error loading processed data: {e}")
+        raise
+
+def emit_curated_json(**context):
+    """Convert processed data to curated JSON documents"""
+    try:
+        ti = context['task_instance']
+        processed_data = ti.xcom_pull(task_ids='transform_validate', key='processed_data')
+        
+        if not processed_data:
+            logger.info("No processed data to curate")
+            return "No processed data to curate"
+        
+        curated_documents = []
+        
+        for processed_record in processed_data:
+            if not processed_record.get('valid', False):
+                continue  # Skip invalid records
+            
+            try:
+                # Convert to model JSON
+                original_data = processed_record.get('original_data', {})
+                model_json = to_model_json(original_data)
+                
+                # Chunk text if needed
+                text_content = model_json.get('text', '')
+                chunks = chunk_text(
+                    text_content,
+                    max_tokens=config.get('chunking', {}).get('max_tokens_per_chunk', 512),
+                    overlap=config.get('chunking', {}).get('chunk_overlap_tokens', 64)
+                )
+                
+                # Create document(s) for each chunk
+                for i, chunk in enumerate(chunks):
+                    document = {
+                        'source': 'processed',
+                        'source_file_id': processed_record['source_file_id'],
+                        'source_row_num': processed_record['source_row_num'],
+                        'text': chunk,
+                        'meta': model_json.get('meta', {}),
+                        'chunk_index': i,
+                        'total_chunks': len(chunks)
+                    }
+                    curated_documents.append(document)
+                    
+            except Exception as e:
+                logger.error(f"Error creating curated document: {e}")
+                continue
+        
+        # Insert curated documents
+        if curated_documents:
+            inserted_count = insert_curated_documents(curated_documents)
+            logger.info(f"Created {inserted_count} curated documents")
+        else:
+            inserted_count = 0
+            logger.info("No curated documents created")
+        
+        # Store result in XCom
+        context['task_instance'].xcom_push(key='curated_document_count', value=inserted_count)
+        
+        return f"Created {inserted_count} curated documents"
+        
+    except Exception as e:
+        logger.error(f"Error creating curated documents: {e}")
+        raise
+
+def publish_processed_event_task(**context):
+    """Publish processing completion event to Kafka"""
+    try:
+        ti = context['task_instance']
+        processed_count = ti.xcom_pull(task_ids='transform_validate', key='processed_records') or 0
+        valid_count = ti.xcom_pull(task_ids='transform_validate', key='valid_count') or 0
+        invalid_count = ti.xcom_pull(task_ids='transform_validate', key='invalid_count') or 0
+        
+        batch_id = f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        # Publish event
+        success = publish_processed_event(
+            processed_count=processed_count,
+            valid_count=valid_count,
+            invalid_count=invalid_count,
+            batch_id=batch_id
+        )
+        
+        if success:
+            logger.info(f"Published processing event for batch {batch_id}")
+            return f"Published processing event for {processed_count} records"
+        else:
+            logger.error("Failed to publish processing event")
+            raise Exception("Failed to publish processing event")
+            
+    except Exception as e:
+        logger.error(f"Error publishing processed event: {e}")
+        raise
 
 # Create DAG
 dag = DAG(
-    'etl_pipeline',
+    dag_id=config.get('airflow', {}).get('dag_id', 'okr_ingestion_etl'),
     default_args=default_args,
-    description='ETL pipeline for OKR data processing',
-    schedule_interval=timedelta(hours=6),  # Run every 6 hours
-    catchup=False,
-    tags=['etl', 'data', 'okr']
+    description='OKR data ingestion and ETL pipeline',
+    schedule_interval=config.get('airflow', {}).get('schedule_interval', '@daily'),
+    max_active_runs=config.get('airflow', {}).get('max_active_runs', 1),
+    catchup=config.get('airflow', {}).get('catchup', False),
+    tags=['etl', 'data', 'okr', 'ingestion']
 )
 
 # Define tasks
-extract_task = PythonOperator(
-    task_id='extract_data',
-    python_callable=extract_data,
-    dag=dag
+discover_csvs_task = PythonOperator(
+    task_id='discover_csvs',
+    python_callable=discover_csvs,
+    dag=dag,
+    doc_md="""
+    ## Discover CSV Files
+    
+    Scans the data/raw directory for CSV files and calculates checksums
+    to determine which files need processing.
+    """
 )
 
-transform_task = PythonOperator(
-    task_id='transform_data',
-    python_callable=transform_data,
-    dag=dag
+ingest_to_raw_task = PythonOperator(
+    task_id='ingest_to_raw',
+    python_callable=ingest_to_raw,
+    dag=dag,
+    doc_md="""
+    ## Ingest to Raw Database
+    
+    Reads CSV files and inserts rows as JSON documents into the 
+    okr_raw database, preserving original data fidelity.
+    """
 )
 
-load_task = PythonOperator(
-    task_id='load_data',
-    python_callable=load_data,
-    dag=dag
+transform_validate_task = PythonOperator(
+    task_id='transform_validate',
+    python_callable=transform_validate,
+    dag=dag,
+    doc_md="""
+    ## Transform and Validate
+    
+    Validates and cleans raw data records, applying data quality
+    checks and transformations.
+    """
 )
 
-validate_task = PythonOperator(
-    task_id='validate_pipeline',
-    python_callable=validate_pipeline,
-    dag=dag
+load_processed_task = PythonOperator(
+    task_id='load_processed',
+    python_callable=load_processed,
+    dag=dag,
+    doc_md="""
+    ## Load Processed Data
+    
+    Inserts validated and cleaned records into the okr_processed
+    database with structured schema.
+    """
+)
+
+emit_curated_json_task = PythonOperator(
+    task_id='emit_curated_json',
+    python_callable=emit_curated_json,
+    dag=dag,
+    doc_md="""
+    ## Emit Curated JSON
+    
+    Converts processed data to model-ready JSON documents,
+    with text chunking for fine-tuning and RAG applications.
+    """
+)
+
+publish_processed_event_task_op = PythonOperator(
+    task_id='publish_processed_event',
+    python_callable=publish_processed_event_task,
+    dag=dag,
+    doc_md="""
+    ## Publish Processing Event
+    
+    Publishes completion event to Kafka topic with processing
+    statistics and batch information.
+    """
 )
 
 # Define task dependencies
-extract_task >> transform_task >> load_task >> validate_task
+discover_csvs_task >> ingest_to_raw_task >> transform_validate_task >> load_processed_task >> emit_curated_json_task >> publish_processed_event_task_op

@@ -19,6 +19,29 @@ services:
       retries: 10
       start_period: 60s
 
+  # PostgreSQL for ETL data (raw, processed, curated)
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: okr_postgres
+    environment:
+      POSTGRES_USER: okr_admin
+      POSTGRES_PASSWORD: okr_password
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5433:5432"
+    restart: always
+    networks:
+      - okr_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U okr_admin"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
   # Redis for Airflow (optional but recommended)
   redis:
     image: redis:7-alpine
@@ -92,6 +115,8 @@ services:
     depends_on:
       airflow-db:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
       kafka:
         condition: service_healthy
     environment:
@@ -109,6 +134,10 @@ services:
       - AIRFLOW__WEBSERVER__HOST=0.0.0.0
       - AIRFLOW__WEBSERVER__PORT=8080
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=okr_admin
+      - POSTGRES_PASSWORD=okr_password
+      - POSTGRES_PORT=5432
       - PYTHONPATH=/opt/airflow/src:/opt/airflow
     user: "50000:0"
     volumes:
@@ -137,6 +166,8 @@ services:
     depends_on:
       airflow-db:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
       kafka:
         condition: service_healthy
     environment:
@@ -147,6 +178,10 @@ services:
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=okr_admin
+      - POSTGRES_PASSWORD=okr_password
+      - POSTGRES_PORT=5432
       - PYTHONPATH=/opt/airflow/src:/opt/airflow
     user: "50000:0"
     volumes:
@@ -263,6 +298,7 @@ services:
 
 volumes:
   airflow_db_data:
+  postgres_data:
   kafka_data:
   oracle_data:
   mlflow_data:
