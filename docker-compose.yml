@@ -1,7 +1,7 @@
 services:
   # PostgreSQL for Airflow metadata
   airflow-db:
-    image: postgres:15
+    image: ankane/pgvector:pg15
     container_name: okr_airflow_db
     environment:
       POSTGRES_USER: airflow
@@ -9,6 +9,7 @@ services:
       POSTGRES_DB: airflow
     volumes:
       - airflow_db_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
     restart: always
     networks:
       - okr_net
@@ -18,6 +19,8 @@ services:
       timeout: 10s
       retries: 10
       start_period: 60s
+    ports:
+      - "5432:5432"
 
   # Redis for Airflow (optional but recommended)
   redis:
@@ -109,6 +112,10 @@ services:
       - AIRFLOW__WEBSERVER__HOST=0.0.0.0
       - AIRFLOW__WEBSERVER__PORT=8080
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - POSTGRES_HOST=airflow-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
       - PYTHONPATH=/opt/airflow/src:/opt/airflow
     user: "50000:0"
     volumes:
@@ -147,6 +154,10 @@ services:
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - POSTGRES_HOST=airflow-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
       - PYTHONPATH=/opt/airflow/src:/opt/airflow
     user: "50000:0"
     volumes:

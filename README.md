@@ -79,10 +79,12 @@ Airflow admin user is created by `airflow-init.sh` (admin/admin).
 
 ## 📊 DAGs
 
-### ETL Pipeline
-- Processes raw data
-- Applies transformations
-- Loads to processed storage
+### ETL Pipeline (okr_ingestion_etl)
+- Discovers CSVs in `data/raw/*.csv`
+- Ingests lossless rows into Postgres DB `okr_raw` (`public.files` and `public.records` as JSONB)
+- Validates/transforms and loads normalized rows to `okr_processed.public.records_clean`
+- Emits curated model-ready documents to `okr_curated.public.documents` (JSONB; optional pgvector column prepared)
+- Publishes Kafka events to topics `okr_raw_ingest` and `okr_processed_updates`
 
 ### Model Training
 - Trains initial models
@@ -107,6 +109,9 @@ Trigger both from the API dashboard or via Airflow UI.
 curl -X POST http://localhost/api/pipeline/trigger/csv_ingestion_dag
 curl -X POST http://localhost/api/pipeline/trigger/api_ingestion_dag
 
+# Trigger ETL ingestion DAG via Airflow
+docker exec -it okr_airflow_webserver airflow dags trigger okr_ingestion_etl
+
 # Check status
 curl http://localhost/api/pipeline/status
 ```
@@ -125,6 +130,32 @@ All services are containerized and include:
 Key environment variables:
 - `KAFKA_BOOTSTRAP_SERVERS` (default: kafka:9092)
 - `AIRFLOW_BASE_URL` (default: http://airflow-webserver:8080)
+
+### Data Ingestion & ETL Quickstart
+
+1) Start stack:
+```bash
+docker-compose up -d --build
+```
+
+2) Add a CSV to `data/raw/` and trigger DAG:
+```bash
+echo -e "id,text\n1,hello world" > data/raw/sample.csv
+docker exec -it okr_airflow_webserver airflow dags trigger okr_ingestion_etl
+```
+
+3) Verify Postgres (okr_raw/processed/curated):
+```bash
+docker exec -it okr_airflow_db psql -U airflow -d okr_raw -c "SELECT COUNT(*) FROM public.records;"
+docker exec -it okr_airflow_db psql -U airflow -d okr_processed -c "SELECT COUNT(*) FROM public.records_clean;"
+docker exec -it okr_airflow_db psql -U airflow -d okr_curated -c "SELECT COUNT(*) FROM public.documents;"
+```
+
+4) Check Kafka events:
+```bash
+docker exec -it okr_kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic okr_raw_ingest --from-beginning --timeout-ms 2000 | cat
+docker exec -it okr_kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic okr_processed_updates --from-beginning --timeout-ms 2000 | cat
+```
 
 ## 🔄 CI/CD
 
