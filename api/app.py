@@ -1,3 +1,4 @@
+
 """Compatibility module to support legacy import path `api.app`.
 
 This module simply re-exports the Flask application instance from
@@ -6,4 +7,5 @@ with Gunicorn or other WSGI servers.
 """
 
 from apps.api.app import app  # noqa: F401
+
 
