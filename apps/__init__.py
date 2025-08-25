@@ -1,3 +1,4 @@
 
-# OKR Apps package
+"""Top-level package marker for application modules."""
+
 
