@@ -1,3 +1,4 @@
-from apps.api.app import app  # re-export for gunicorn compatibility
 
-__all__ = ["app"]
+from apps.api.app import app  # re-export Flask app for gunicorn module path compatibility
+
+

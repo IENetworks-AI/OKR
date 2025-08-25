@@ -1,1 +1,3 @@
-# Marker to make 'api' a package and proxy to apps.api
+
+# Make top-level `api` a package to allow `api.app` import
+
