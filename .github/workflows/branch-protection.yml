@@ -38,6 +38,7 @@ jobs:
       - name: Run unit tests
         run: |
           echo "Running unit tests..."
+
           # Run pytest and generate coverage if possible. Handle 'no tests collected' (exit code 5).
           set +e
           python -m pytest -v --maxfail=1 --disable-warnings --cov=src --cov-report=xml
@@ -48,10 +49,11 @@ jobs:
             exit 0
           else
             exit $exitcode
+
           fi
       
       - name: Upload coverage to Codecov
-        if: always()
+        if: ${{ always() && hashFiles('coverage.xml') != '' }}
         uses: codecov/codecov-action@v3
         with:
           file: ./coverage.xml
@@ -87,7 +89,9 @@ jobs:
       - name: Build Docker images
         run: |
           docker build -t okr-api:test -f apps/api/Dockerfile .
+
           echo "Skipping kafka producer/consumer images: not present in this repository"
+
       
       - name: Test Docker Compose
         run: |
@@ -111,38 +115,51 @@ jobs:
       
       - name: Validate Airflow DAGs (static syntax)
         run: |
-          echo "Validating Airflow DAG Python syntax..."
-          python - << 'PYCODE'
-import os, sys, ast, glob
-folder = 'src/dags'
-errors = []
-for path in glob.glob(os.path.join(folder, '*.py')):
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            ast.parse(f.read(), filename=path)
-        print(f"✓ Syntax OK: {path}")
-    except Exception as e:
-        print(f"❌ Syntax error in {path}: {e}")
-        errors.append((path, str(e)))
-if errors:
-    sys.exit(1)
-print('All DAG files passed static syntax check')
-PYCODE
+
+          echo "Validating Airflow DAGs..."
+          python -c "
+          import os
+          import sys
+          sys.path.append('src')
+          from airflow.models import DagBag
+          dagbag = DagBag('src/dags')
+          if dagbag.import_errors:
+              print('DAG import errors:')
+              for filename, errors in dagbag.import_errors.items():
+                  print(f'{filename}: {errors}')
+              sys.exit(1)
+          print('All DAGs imported successfully')
+          "
       
       - name: Validate ETL Pipeline Components
         run: |
-          echo "Validating ETL pipeline components (non-Airflow modules)..."
-          python - << 'PYCODE'
-import sys
-sys.path.append('src')
-try:
-    import utils.helpers  # noqa: F401
-    import data.streaming  # noqa: F401
-    print('Core ETL utility modules imported successfully')
-except Exception as e:
-    print('Core ETL module import failed:', e)
-    raise
-PYCODE
+          echo "Validating ETL pipeline components..."
+          python - <<'PY'
+import importlib.util, sys, os
+
+dag_dir = 'src/dags'
+failures = []
+
+if not os.path.isdir(dag_dir):
+    print(f'❌ Missing DAG directory: {dag_dir}')
+    sys.exit(1)
+
+for fname in os.listdir(dag_dir):
+    if fname.endswith('.py') and fname != '__init__.py':
+        path = os.path.join(dag_dir, fname)
+        try:
+            spec = importlib.util.spec_from_file_location(fname[:-3], path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            print(f'✓ Imported {fname}')
+        except Exception as e:
+            print(f'❌ Failed to import {fname}: {e}')
+            failures.append(fname)
+
+sys.exit(1 if failures else 0)
+PY
+
+
       
       - name: Validate Configuration Files
         run: |
