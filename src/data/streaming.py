@@ -332,7 +332,87 @@ def create_sample_streaming_pipeline():
         logger.error(f"Error in sample streaming pipeline: {e}")
         return pd.DataFrame()
 
+# ---------------------------------------------------------------------------
+# Lightweight helper wrappers requested by ingest pipeline
+# ---------------------------------------------------------------------------
+import os
+from kafka.errors import NoBrokersAvailable
+
+_PRODUCER = None
+
+def get_producer() -> KafkaProducer:
+    """Singleton-ish KafkaProducer using env var KAFKA_BOOTSTRAP_SERVERS."""
+    global _PRODUCER
+    if _PRODUCER is not None:
+        return _PRODUCER
+    servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+    try:
+        _PRODUCER = KafkaProducer(
+            bootstrap_servers=servers,
+            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+            key_serializer=lambda k: k.encode("utf-8") if k else None,
+            acks="all",
+            retries=3,
+        )
+        logger.info("Kafka producer initialised for servers %s", servers)
+        return _PRODUCER
+    except NoBrokersAvailable:
+        logger.error("No Kafka brokers available at %s", servers)
+        raise
+
+
+def publish(topic: str, key: str | None, value: dict) -> bool:
+    """Publish a JSON-serialisable *value* to *topic*.
+
+    Returns True on success; logs and returns False on failure.
+    """
+    try:
+        producer = get_producer()
+        future = producer.send(topic, key=key, value=value)
+        future.get(timeout=10)
+        logger.debug("Published message to %s", topic)
+        return True
+    except Exception as e:
+        logger.exception("Failed to publish to Kafka topic %s: %s", topic, e)
+        return False
+
+
+# ---------------------------------------------------------------------------
+# CLI entrypoints -------------------------------------------------------------
+# ---------------------------------------------------------------------------
+import argparse
+
+def _cli_publish_ingest_event(args):
+    payload = {"file": args.file, "rows": args.rows, "event": "ingest", "ts": datetime.utcnow().isoformat() + "Z"}
+    publish("okr_raw_ingest", key=args.file, value=payload)
+
+
+def _cli_publish_processed_event(args):
+    payload = {"records": args.count, "event": "processed", "ts": datetime.utcnow().isoformat() + "Z"}
+    publish("okr_processed_updates", key=str(args.count), value=payload)
+
+
+def _build_arg_parser():
+    parser = argparse.ArgumentParser(prog="python -m src.data.streaming", description="Kafka helper CLI")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p1 = sub.add_parser("publish_ingest_event", help="Publish file ingest event")
+    p1.add_argument("--file", required=True, help="Path of ingested file")
+    p1.add_argument("--rows", type=int, required=True, help="Row count")
+    p1.set_defaults(func=_cli_publish_ingest_event)
+
+    p2 = sub.add_parser("publish_processed_event", help="Publish processed rows event")
+    p2.add_argument("--count", type=int, required=True, help="Number of processed records")
+    p2.set_defaults(func=_cli_publish_processed_event)
+
+    return parser
+
+
+def main():
+    parser = _build_arg_parser()
+    args = parser.parse_args()
+    args.func(args)
+
+
 if __name__ == "__main__":
-    # Run sample pipeline
-    df = create_sample_streaming_pipeline()
-    print("Sample streaming pipeline completed")
+    main()
