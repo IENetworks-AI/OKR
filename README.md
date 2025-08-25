@@ -126,6 +126,70 @@ Key environment variables:
 - `KAFKA_BOOTSTRAP_SERVERS` (default: kafka:9092)
 - `AIRFLOW_BASE_URL` (default: http://airflow-webserver:8080)
 
+## 📥 Data Ingestion & ETL
+
+This repo now includes a Postgres-backed ingestion pipeline with Kafka events and an Airflow DAG `okr_ingestion_etl` that:
+- Ingests all `data/raw/*.csv` into Postgres DB `okr_raw` as JSONB with file/row metadata
+- Validates/transforms and loads normalized rows to `okr_processed`
+- Emits model-ready JSON (chunked) into `okr_curated` (JSONB), with optional `pgvector` column prepared
+- Publishes Kafka events to topics `okr_raw_ingest` and `okr_processed_updates`
+
+### Quickstart
+
+1) Bring up services (includes Kafka, Airflow, single Postgres):
+```bash
+docker-compose up -d --build
+```
+
+2) Verify Postgres initialized (three DBs created) and add a sample CSV:
+```bash
+echo "id,text,value\n1,hello world,10\n2,second row,20" > data/raw/sample.csv
+```
+
+3) Trigger the DAG from Airflow UI (http://localhost:8081) or CLI:
+```bash
+# In Airflow web UI: trigger `okr_ingestion_etl`
+# Or from inside the webserver container:
+docker exec -it okr_airflow_webserver airflow dags trigger okr_ingestion_etl
+```
+
+4) Check results with SQL (requires psql available; or use any client):
+```bash
+# Raw
+docker exec -it okr_airflow_db psql -U airflow -d okr_raw -c "SELECT * FROM public.files ORDER BY ingested_at DESC LIMIT 5;" | cat
+docker exec -it okr_airflow_db psql -U airflow -d okr_raw -c "SELECT COUNT(*) FROM public.records;" | cat
+
+# Processed
+docker exec -it okr_airflow_db psql -U airflow -d okr_processed -c "SELECT COUNT(*) FROM public.records_clean;" | cat
+
+# Curated
+docker exec -it okr_airflow_db psql -U airflow -d okr_curated -c "SELECT COUNT(*) FROM public.documents;" | cat
+```
+
+5) Observe Kafka events:
+```bash
+# Using Kafka UI at http://localhost:8085 (topics auto-created)
+# Or use the kafka-console-consumer inside the broker
+docker exec -it okr_kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic okr_raw_ingest --from-beginning --timeout-ms 5000 | cat
+docker exec -it okr_kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic okr_processed_updates --from-beginning --timeout-ms 5000 | cat
+```
+
+6) Local debugging without Airflow:
+```bash
+# Ingest a specific CSV
+python scripts/etl_cli.py ingest --path data/raw/sample.csv
+
+# Process rows for a given file_id (from previous command output)
+python scripts/etl_cli.py process --file-id 1
+
+# Curate documents for file_id
+python scripts/etl_cli.py curate --file-id 1
+```
+
+Notes:
+- Single Postgres instance is reused (service `airflow-db`). Init scripts in `deploy/postgres/init` create DBs `okr_raw`, `okr_processed`, `okr_curated` and required tables.
+- `pgvector` extension is enabled in `okr_curated` only; an `embedding vector(768)` column is prepared.
+
 ## 🔄 CI/CD
 
 GitHub Actions workflows for:

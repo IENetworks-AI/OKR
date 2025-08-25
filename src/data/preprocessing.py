@@ -116,3 +116,118 @@ class DataPreprocessor:
         
         logger.info("Data preprocessing pipeline completed successfully")
         return df_scaled, target
+
+
+# ------------------------
+# New ETL helper functions
+# ------------------------
+import csv
+from typing import Iterable, Dict, List, Tuple
+
+
+def _coerce_value(value: str):
+    if value is None:
+        return None
+    if isinstance(value, (int, float, bool)):
+        return value
+    s = str(value).strip()
+    if s == "":
+        return None
+    # Try int
+    try:
+        if s.isdigit() or (s.startswith("-") and s[1:].isdigit()):
+            return int(s)
+    except Exception:
+        pass
+    # Try float
+    try:
+        return float(s)
+    except Exception:
+        pass
+    # Booleans
+    lower = s.lower()
+    if lower in {"true", "false"}:
+        return lower == "true"
+    return s
+
+
+def read_csv_to_json_rows(path: str) -> Iterable[dict]:
+    """Yield each CSV row as a JSON-serializable dict with basic dtype coercion."""
+    logger.info(f"Reading CSV to JSON rows: {path}")
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            yield {k: _coerce_value(v) for k, v in row.items()}
+
+
+def _extract_text_from_row(row: Dict) -> str:
+    # Prefer common text fields, else concatenate string-like values
+    for key in ("text", "content", "body", "description"):
+        if key in row and isinstance(row[key], str) and row[key].strip():
+            return row[key].strip()
+    # Fallback: join string-like values
+    parts: List[str] = []
+    for k, v in row.items():
+        if isinstance(v, str) and v.strip():
+            parts.append(v.strip())
+    return " ".join(parts).strip()
+
+
+def validate_and_clean(row: Dict) -> Tuple[Dict, bool]:
+    """Basic validation and cleaning.
+
+    - Ensures non-empty text field can be derived
+    - Coerces scalar types for numerics and booleans
+    - Trims strings
+    Returns (clean_row, is_valid)
+    """
+    clean: Dict = {}
+    for k, v in row.items():
+        if isinstance(v, str):
+            vv = v.strip()
+            clean[k] = _coerce_value(vv)
+        else:
+            clean[k] = v
+
+    text = _extract_text_from_row(clean)
+    is_valid = bool(text)
+    clean["__text__"] = text  # transient field used downstream
+    return clean, is_valid
+
+
+def to_model_json(clean_row: Dict) -> Dict:
+    """Map a cleaned row to model-ready JSON for fine-tune/RAG.
+
+    Schema: {"text": str, "labels": Optional[list|str], "meta": dict}
+    """
+    text = clean_row.get("__text__") or _extract_text_from_row(clean_row)
+    labels = None
+    if "labels" in clean_row:
+        labels = clean_row["labels"]
+    elif "label" in clean_row:
+        labels = clean_row["label"]
+    meta = {k: v for k, v in clean_row.items() if k not in {"__text__"}}
+    return {"text": text, "labels": labels, "meta": meta}
+
+
+def chunk_text(text: str, max_tokens: int = 512, overlap: int = 64) -> List[str]:
+    """Chunk text by whitespace into approx token-sized windows with overlap.
+
+    Token-agnostic heuristic: assumes 1 token ~= 1 word.
+    """
+    if not text:
+        return []
+    words = text.split()
+    if max_tokens <= 0:
+        return [text]
+    if overlap < 0:
+        overlap = 0
+    chunks: List[str] = []
+    step = max(1, max_tokens - overlap)
+    for start in range(0, len(words), step):
+        end = min(len(words), start + max_tokens)
+        chunks.append(" ".join(words[start:end]))
+        if end >= len(words):
+            break
+    return chunks
+

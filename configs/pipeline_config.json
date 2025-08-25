@@ -10,11 +10,14 @@
     "final_directory": "data/final",
     "models_directory": "data/models",
     "results_directory": "data/results",
-    "archive_directory": "data/archive"
+    "archive_directory": "data/archive",
+    "raw_glob": "data/raw/*.csv"
   },
   "kafka": {
     "bootstrap_servers": "kafka:9092",
     "topics": {
+      "okr_raw_ingest": "okr_raw_ingest",
+      "okr_processed_updates": "okr_processed_updates",
       "okr_data": "okr_data",
       "model_updates": "model_updates",
       "alerts": "alerts"
@@ -23,7 +26,7 @@
   },
   "airflow": {
     "dag_schedule": {
-      "etl_pipeline": "0 */6 * * *",
+      "etl_pipeline": "@daily",
       "model_training": "0 0 * * *",
       "monitoring": "0 */2 * * *"
     },
