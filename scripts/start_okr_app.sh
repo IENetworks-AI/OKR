@@ -27,7 +27,7 @@ fi
 echo "✅ Starting Flask app on port $PORT..."
 
 # Start the Flask app
-python api/app.py --port $PORT &
+python apps/api/app.py --port $PORT &
 
 # Save the PID
 echo $! > okr_app.pid

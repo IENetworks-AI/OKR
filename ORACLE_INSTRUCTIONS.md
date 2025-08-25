@@ -39,7 +39,7 @@ netstat -tlnp | grep LISTEN
 ```bash
 cd ~/okr-project
 source venv/bin/activate
-python api/app.py --port 5001
+python apps/api/app.py --port 5001
 ```
 
 ## 📊 Generate Sample Data
@@ -82,8 +82,8 @@ bash scripts/start_okr_app.sh
 
 ## 📁 Important Files
 
-- **App**: `api/app.py`
-- **Dashboard**: `api/dashboard.html`
+- **App**: `apps/api/app.py`
+- **Dashboard**: `apps/api/dashboard.html`
 - **Config**: `configs/db_config.yaml`
 - **Data**: `data/raw/sample_okr_data.json`
 - **Scripts**: `scripts/start_okr_app.sh`, `scripts/check_status.sh`

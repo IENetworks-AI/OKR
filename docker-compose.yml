@@ -108,9 +108,11 @@ services:
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC
       - AIRFLOW__WEBSERVER__HOST=0.0.0.0
       - AIRFLOW__WEBSERVER__PORT=8080
+      - PYTHONPATH=/opt/airflow/src:/opt/airflow
     user: "50000:0"
     volumes:
       - ./src/dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
       - ./data:/opt/airflow/data
       - ./logs:/opt/airflow/logs
       - ./airflow-init.sh:/airflow-init.sh
@@ -142,9 +144,11 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC
+      - PYTHONPATH=/opt/airflow/src:/opt/airflow
     user: "50000:0"
     volumes:
       - ./src/dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
       - ./data:/opt/airflow/data
       - ./logs:/opt/airflow/logs
     restart: always
@@ -156,7 +160,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: api/Dockerfile
+      dockerfile: apps/api/Dockerfile
     container_name: okr_api
     ports:
       - "5001:5001"
@@ -256,4 +260,4 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16          
+        - subnet: 172.20.0.0/16

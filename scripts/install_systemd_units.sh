@@ -59,7 +59,7 @@ After=network.target
 Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/ai-project-template
-ExecStart=/home/ubuntu/ai-project-template/api/gunicorn_start.sh
+ExecStart=/home/ubuntu/ai-project-template/apps/api/gunicorn_start.sh
 Restart=always
 RestartSec=5
 [Install]
