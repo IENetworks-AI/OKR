@@ -15,6 +15,7 @@ from kafka import KafkaProducer, KafkaConsumer
 from kafka.errors import KafkaError
 import threading
 import time
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -157,6 +158,31 @@ class KafkaStreamManager:
             
         except Exception as e:
             logger.error(f"Error closing Kafka connections: {e}")
+
+
+# New helpers per spec
+def get_producer() -> KafkaProducer:
+    bootstrap = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+    return KafkaProducer(
+        bootstrap_servers=bootstrap,
+        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+        key_serializer=lambda k: k.encode("utf-8") if k else None,
+        acks="all",
+        retries=3,
+    )
+
+
+def publish(topic: str, key: str, value: dict) -> bool:
+    try:
+        producer = get_producer()
+        future = producer.send(topic, key=key, value=value)
+        future.get(timeout=10)
+        producer.flush()
+        producer.close()
+        return True
+    except Exception as e:
+        logger.error(f"Kafka publish failed: {e}")
+        return False
 
 class DataStreamer:
     """Handles data streaming operations"""
@@ -333,6 +359,35 @@ def create_sample_streaming_pipeline():
         return pd.DataFrame()
 
 if __name__ == "__main__":
-    # Run sample pipeline
-    df = create_sample_streaming_pipeline()
-    print("Sample streaming pipeline completed")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Kafka publish helpers")
+    sub = parser.add_subparsers(dest="cmd")
+
+    pub_ing = sub.add_parser("publish_ingest_event")
+    pub_ing.add_argument("--file", required=True)
+    pub_ing.add_argument("--rows", type=int, required=True)
+
+    pub_proc = sub.add_parser("publish_processed_event")
+    pub_proc.add_argument("--count", type=int, required=True)
+
+    args = parser.parse_args()
+
+    if args.cmd == "publish_ingest_event":
+        ok = publish(
+            topic=os.getenv("TOPIC_RAW_INGEST", "okr_raw_ingest"),
+            key=os.path.basename(args.file),
+            value={"file": args.file, "rows": args.rows, "ts": datetime.utcnow().isoformat()},
+        )
+        print("ok" if ok else "fail")
+    elif args.cmd == "publish_processed_event":
+        ok = publish(
+            topic=os.getenv("TOPIC_PROCESSED_UPDATES", "okr_processed_updates"),
+            key="processed",
+            value={"count": args.count, "ts": datetime.utcnow().isoformat()},
+        )
+        print("ok" if ok else "fail")
+    else:
+        # Fallback to sample
+        df = create_sample_streaming_pipeline()
+        print("Sample streaming pipeline completed")

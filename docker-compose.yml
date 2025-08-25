@@ -9,6 +9,7 @@ services:
       POSTGRES_DB: airflow
     volumes:
       - airflow_db_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
     restart: always
     networks:
       - okr_net

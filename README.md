@@ -126,6 +126,47 @@ Key environment variables:
 - `KAFKA_BOOTSTRAP_SERVERS` (default: kafka:9092)
 - `AIRFLOW_BASE_URL` (default: http://airflow-webserver:8080)
 
+## Data Ingestion & ETL
+
+Quickstart:
+
+1) Compose up (first run initializes Postgres databases `okr_raw`, `okr_processed`, `okr_curated` via `deploy/postgres/init`).
+```bash
+docker-compose up -d --build
+```
+
+2) Trigger the Airflow DAG `okr_ingestion_etl`:
+```bash
+docker exec -it okr_airflow_webserver airflow dags list | cat
+docker exec -it okr_airflow_webserver airflow dags trigger okr_ingestion_etl
+```
+
+3) Drop a CSV into `data/raw/` and re-run the DAG or use the CLI:
+```bash
+echo -e "id,text\n1,hello world" > data/raw/sample.csv
+python scripts/etl_cli.py --glob "data/raw/*.csv"
+```
+
+4) Verify Postgres writes (inside the Airflow DB container):
+```bash
+docker exec -it okr_airflow_db psql -U airflow -d okr_raw -c "SELECT COUNT(*) FROM public.records;" | cat
+docker exec -it okr_airflow_db psql -U airflow -d okr_processed -c "SELECT COUNT(*) FROM public.records_clean;" | cat
+docker exec -it okr_airflow_db psql -U airflow -d okr_curated -c "SELECT COUNT(*) FROM public.documents;" | cat
+```
+
+5) Kafka events:
+```bash
+# Ingest events
+docker exec -it okr_kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic okr_raw_ingest --from-beginning --timeout-ms 5000 | cat
+# Processed updates
+docker exec -it okr_kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic okr_processed_updates --from-beginning --timeout-ms 5000 | cat
+```
+
+Tables:
+- okr_raw.public.files, okr_raw.public.records (jsonb rows)
+- okr_processed.public.records_clean (normalized, valid flag)
+- okr_curated.public.documents (JSONB and optional pgvector column)
+
 ## 🔄 CI/CD
 
 GitHub Actions workflows for:

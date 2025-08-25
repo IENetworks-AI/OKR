@@ -1,4 +1,23 @@
 {
+  "raw_glob": "data/raw/*.csv",
+  "chunking": {
+    "max_tokens": 512,
+    "overlap": 64
+  },
+  "csv_read_options": {
+    "encoding": "utf-8"
+  },
+  "db_names": {
+    "raw": "okr_raw",
+    "processed": "okr_processed",
+    "curated": "okr_curated"
+  },
+  "topics": {
+    "raw": "okr_raw_ingest",
+    "processed": "okr_processed_updates"
+  }
+}
+{
   "pipeline": {
     "name": "OKR ML Pipeline",
     "version": "2.0.0",
