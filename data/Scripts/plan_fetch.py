@@ -16,11 +16,7 @@ firebase_login_url = f"https://identitytoolkit.googleapis.com/v1/accounts:signIn
 plan_tasks_url = "https://test-okr-backend.ienetworks.co/api/v1/plan-tasks"
 
 # Step 1: Login to Firebase
-login_payload = {
-    "email": EMAIL,
-    "password": PASSWORD,
-    "returnSecureToken": True
-}
+login_payload = {"email": EMAIL, "password": PASSWORD, "returnSecureToken": True}
 firebase_resp = requests.post(firebase_login_url, json=login_payload)
 firebase_resp.raise_for_status()
 id_token = firebase_resp.json().get("idToken")
@@ -32,7 +28,7 @@ if not id_token:
 headers = {
     "Authorization": f"Bearer {id_token}",
     "Content-Type": "application/json",
-    "tenantId": TENANT_ID
+    "tenantId": TENANT_ID,
 }
 
 response = requests.get(plan_tasks_url, headers=headers)
