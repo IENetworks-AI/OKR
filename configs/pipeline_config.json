@@ -1,72 +1,10 @@
 {
-  "pipeline": {
-    "name": "OKR ML Pipeline",
-    "version": "2.0.0",
-    "description": "Modern ML pipeline with Kafka, Airflow, and MLflow"
-  },
-  "data": {
-    "raw_directory": "data/raw",
-    "processed_directory": "data/processed",
-    "final_directory": "data/final",
-    "models_directory": "data/models",
-    "results_directory": "data/results",
-    "archive_directory": "data/archive"
-  },
+  "raw_glob": "data/raw/*.csv",
+  "chunking": {"max_tokens": 512, "overlap": 64},
+  "csv_read_options": {"encoding": "utf-8"},
+  "db_names": {"raw": "okr_raw", "processed": "okr_processed", "curated": "okr_curated"},
   "kafka": {
-    "bootstrap_servers": "kafka:9092",
-    "topics": {
-      "okr_data": "okr_data",
-      "model_updates": "model_updates",
-      "alerts": "alerts"
-    },
-    "consumer_group": "okr_ml_pipeline"
-  },
-  "airflow": {
-    "dag_schedule": {
-      "etl_pipeline": "0 */6 * * *",
-      "model_training": "0 0 * * *",
-      "monitoring": "0 */2 * * *"
-    },
-    "retries": 3,
-    "retry_delay_minutes": 5
-  },
-  "mlflow": {
-    "tracking_uri": "http://localhost:5000",
-    "experiment_name": "okr_ml_experiments",
-    "artifact_location": "data/mlflow_artifacts"
-  },
-  "model": {
-    "algorithm": "RandomForest",
-    "hyperparameters": {
-      "n_estimators": 100,
-      "max_depth": 10,
-      "random_state": 42
-    },
-    "evaluation_metrics": ["accuracy", "precision", "recall", "f1_score", "roc_auc"],
-    "update_threshold": 0.05
-  },
-  "monitoring": {
-    "quality_threshold": 0.8,
-    "performance_threshold": 0.7,
-    "alert_levels": ["info", "warning", "critical"],
-    "check_interval_hours": 2
-  },
-  "api": {
-    "host": "0.0.0.0",
-    "port": 5001,
-    "debug": false,
-    "workers": 4
-  },
-  "sources": {
-    "csv": {
-      "directory": "data/raw",
-      "pattern": "*.csv"
-    },
-    "api": {
-      "base_url": "https://api.publicapis.org",
-      "endpoint": "/entries",
-      "method": "GET",
-      "params": {}
-    }
+    "topics": {"raw_ingest": "okr_raw_ingest", "processed_updates": "okr_processed_updates"},
+    "bootstrap_servers": "kafka:9092"
   }
 }

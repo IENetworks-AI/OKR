@@ -292,6 +292,30 @@ class DataCollector:
         self.collected_data.clear()
         logger.info("Collected data cleared")
 
+# Simple helper functions for ingestion pipeline ------------------------------
+from functools import lru_cache
+
+@lru_cache(maxsize=1)
+def get_producer():
+    """Return a singleton KafkaProducer."""
+    mgr = KafkaStreamManager()
+    return mgr.create_producer()
+
+
+def publish(topic: str, key: str | None, value: dict) -> bool:
+    """Publish a JSON-serializable message to Kafka, logging errors."""
+    try:
+        prod = get_producer()
+        future = prod.send(topic, key=key, value=value)
+        future.get(timeout=10)
+        logger.info(f"Published message to {topic}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed publishing to {topic}: {e}")
+        return False
+
+# -----------------------------------------------------------------------------
+
 def create_sample_streaming_pipeline():
     """Create a sample streaming pipeline"""
     try:
@@ -333,6 +357,25 @@ def create_sample_streaming_pipeline():
         return pd.DataFrame()
 
 if __name__ == "__main__":
-    # Run sample pipeline
-    df = create_sample_streaming_pipeline()
-    print("Sample streaming pipeline completed")
+    import argparse, sys, json, pathlib, uuid
+
+    parser = argparse.ArgumentParser(description="Kafka event publisher helpers")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    pub_ingest = subparsers.add_parser("publish_ingest_event", help="Publish ingestion event")
+    pub_ingest.add_argument("--file", required=True, help="Path to ingested file")
+    pub_ingest.add_argument("--rows", type=int, required=True, help="Row count")
+
+    pub_proc = subparsers.add_parser("publish_processed_event", help="Publish processed update event")
+    pub_proc.add_argument("--count", type=int, required=True, help="Number of processed records")
+
+    args = parser.parse_args()
+
+    if args.command == "publish_ingest_event":
+        payload = {"event": "ingest_complete", "file": pathlib.Path(args.file).name, "rows": args.rows, "event_id": str(uuid.uuid4())}
+        ok = publish("okr_raw_ingest", None, payload)
+        sys.exit(0 if ok else 1)
+    elif args.command == "publish_processed_event":
+        payload = {"event": "processed_complete", "count": args.count, "event_id": str(uuid.uuid4())}
+        ok = publish("okr_processed_updates", None, payload)
+        sys.exit(0 if ok else 1)
