@@ -9,11 +9,35 @@ services:
       POSTGRES_DB: airflow
     volumes:
       - airflow_db_data:/var/lib/postgresql/data
+  postgres_data:
     restart: always
     networks:
       - okr_net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # PostgreSQL for OKR data pipeline
+  postgres:
+    image: postgres:15
+    container_name: okr_postgres_data
+    environment:
+      POSTGRES_USER: okr_admin
+      POSTGRES_PASSWORD: okr_password
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5433:5432"  # Different port to avoid conflict with airflow-db
+    restart: always
+    networks:
+      - okr_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U okr_admin"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -34,7 +58,11 @@ services:
 
   # Kafka with KRaft mode
   kafka:
+      postgres:
+        condition: service_healthy
     image: bitnami/kafka:latest
+      postgres:
+        condition: service_healthy
     container_name: okr_kafka
     hostname: kafka
     environment:
@@ -43,7 +71,11 @@ services:
       - KAFKA_CFG_NODE_ID=1
       - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
       - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      postgres:
+        condition: service_healthy
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      postgres:
+        condition: service_healthy
       - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
       - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
       - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
@@ -77,9 +109,13 @@ services:
     environment:
       - KAFKA_CLUSTERS_0_NAME=okr
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      postgres:
+        condition: service_healthy
       - KAFKA_CLUSTERS_0_READONLY=false
     depends_on:
       kafka:
+      postgres:
+        condition: service_healthy
         condition: service_healthy
     restart: always
     networks:
@@ -93,6 +129,8 @@ services:
       airflow-db:
         condition: service_healthy
       kafka:
+      postgres:
+        condition: service_healthy
         condition: service_healthy
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
@@ -109,7 +147,17 @@ services:
       - AIRFLOW__WEBSERVER__HOST=0.0.0.0
       - AIRFLOW__WEBSERVER__PORT=8080
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      postgres:
+        condition: service_healthy
       - PYTHONPATH=/opt/airflow/src:/opt/airflow
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=okr_admin
+      - POSTGRES_PASSWORD=okr_password
+      - POSTGRES_PORT=5432
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=okr_admin
+      - POSTGRES_PASSWORD=okr_password
+      - POSTGRES_PORT=5432
     user: "50000:0"
     volumes:
       - ./src/dags:/opt/airflow/dags
@@ -138,6 +186,8 @@ services:
       airflow-db:
         condition: service_healthy
       kafka:
+      postgres:
+        condition: service_healthy
         condition: service_healthy
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
@@ -147,7 +197,17 @@ services:
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      postgres:
+        condition: service_healthy
       - PYTHONPATH=/opt/airflow/src:/opt/airflow
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=okr_admin
+      - POSTGRES_PASSWORD=okr_password
+      - POSTGRES_PORT=5432
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=okr_admin
+      - POSTGRES_PASSWORD=okr_password
+      - POSTGRES_PORT=5432
     user: "50000:0"
     volumes:
       - ./src/dags:/opt/airflow/dags
@@ -174,6 +234,8 @@ services:
       - ./data:/app/data
     depends_on:
       kafka:
+      postgres:
+        condition: service_healthy
         condition: service_healthy
       airflow-db:
         condition: service_healthy
@@ -183,6 +245,8 @@ services:
     environment:
       - PYTHONPATH=/app:/app/src
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      postgres:
+        condition: service_healthy
       - AIRFLOW_BASE_URL=http://airflow-webserver:8080
       - AIRFLOW_USER=admin
       - AIRFLOW_PASSWORD=admin
@@ -263,6 +327,7 @@ services:
 
 volumes:
   airflow_db_data:
+  postgres_data:
   kafka_data:
   oracle_data:
   mlflow_data:

@@ -3,22 +3,135 @@ Kafka Streaming Module
 
 This module handles Kafka data streaming for real-time
 data ingestion and processing in the ML pipeline.
+Updated for ETL pipeline with Kafka helpers and CLI entrypoints.
 """
 
 import json
 import logging
+import os
+import sys
+import argparse
 from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime
 import pandas as pd
 import numpy as np
 from kafka import KafkaProducer, KafkaConsumer
-from kafka.errors import KafkaError
+from kafka.errors import KafkaError, NoBrokersAvailable
 import threading
 import time
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+def get_producer(bootstrap_servers: str = None) -> KafkaProducer:
+    """
+    Get Kafka producer with error handling.
+    
+    Args:
+        bootstrap_servers: Kafka bootstrap servers
+        
+    Returns:
+        KafkaProducer instance
+    """
+    if bootstrap_servers is None:
+        bootstrap_servers = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'kafka:9092')
+    
+    try:
+        producer = KafkaProducer(
+            bootstrap_servers=bootstrap_servers,
+            value_serializer=lambda v: json.dumps(v, default=str).encode('utf-8'),
+            key_serializer=lambda k: k.encode('utf-8') if k else None,
+            acks='all',
+            retries=3,
+            retry_backoff_ms=1000,
+            request_timeout_ms=30000
+        )
+        logger.info(f"Kafka producer created successfully for {bootstrap_servers}")
+        return producer
+    except Exception as e:
+        logger.error(f"Error creating Kafka producer: {e}")
+        raise
+
+
+def publish(topic: str, key: str, value: Dict[str, Any], bootstrap_servers: str = None) -> bool:
+    """
+    Publish message to Kafka topic with JSON serialization and error handling.
+    
+    Args:
+        topic: Kafka topic name
+        key: Message key
+        value: Message value (will be JSON serialized)
+        bootstrap_servers: Kafka bootstrap servers
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    producer = None
+    try:
+        producer = get_producer(bootstrap_servers)
+        
+        # Ensure value is JSON serializable
+        if not isinstance(value, (dict, list, str, int, float, bool, type(None))):
+            value = str(value)
+        
+        future = producer.send(topic, value=value, key=key)
+        record_metadata = future.get(timeout=10)
+        
+        logger.info(f"Message published to {topic} [partition: {record_metadata.partition}, offset: {record_metadata.offset}]")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error publishing message to {topic}: {e}")
+        return False
+    finally:
+        if producer:
+            producer.close()
+
+
+def publish_ingest_event(file_path: str, rows: int, bootstrap_servers: str = None) -> bool:
+    """
+    Publish ingestion event to okr_raw_ingest topic.
+    
+    Args:
+        file_path: Path to ingested file
+        rows: Number of rows ingested
+        bootstrap_servers: Kafka bootstrap servers
+        
+    Returns:
+        bool: True if successful
+    """
+    event = {
+        'event_type': 'raw_ingest',
+        'file_path': file_path,
+        'rows_ingested': rows,
+        'timestamp': datetime.now().isoformat(),
+        'status': 'completed'
+    }
+    
+    return publish('okr_raw_ingest', os.path.basename(file_path), event, bootstrap_servers)
+
+
+def publish_processed_event(count: int, bootstrap_servers: str = None) -> bool:
+    """
+    Publish processed event to okr_processed_updates topic.
+    
+    Args:
+        count: Number of records processed
+        bootstrap_servers: Kafka bootstrap servers
+        
+    Returns:
+        bool: True if successful
+    """
+    event = {
+        'event_type': 'processed_update',
+        'records_processed': count,
+        'timestamp': datetime.now().isoformat(),
+        'status': 'completed'
+    }
+    
+    return publish('okr_processed_updates', f"batch_{int(time.time())}", event, bootstrap_servers)
 
 class KafkaStreamManager:
     """Manages Kafka streaming operations"""
@@ -332,7 +445,45 @@ def create_sample_streaming_pipeline():
         logger.error(f"Error in sample streaming pipeline: {e}")
         return pd.DataFrame()
 
+def main():
+    """CLI entrypoint for streaming operations"""
+    parser = argparse.ArgumentParser(description='Kafka streaming operations for OKR ETL pipeline')
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    
+    # Publish ingest event command
+    ingest_parser = subparsers.add_parser('publish_ingest_event', help='Publish ingestion event')
+    ingest_parser.add_argument('--file', required=True, help='File path that was ingested')
+    ingest_parser.add_argument('--rows', type=int, required=True, help='Number of rows ingested')
+    ingest_parser.add_argument('--bootstrap-servers', help='Kafka bootstrap servers')
+    
+    # Publish processed event command
+    processed_parser = subparsers.add_parser('publish_processed_event', help='Publish processed event')
+    processed_parser.add_argument('--count', type=int, required=True, help='Number of records processed')
+    processed_parser.add_argument('--bootstrap-servers', help='Kafka bootstrap servers')
+    
+    args = parser.parse_args()
+    
+    if args.command == 'publish_ingest_event':
+        success = publish_ingest_event(args.file, args.rows, args.bootstrap_servers)
+        if success:
+            print(f"Successfully published ingest event for {args.file} ({args.rows} rows)")
+            sys.exit(0)
+        else:
+            print(f"Failed to publish ingest event for {args.file}")
+            sys.exit(1)
+            
+    elif args.command == 'publish_processed_event':
+        success = publish_processed_event(args.count, args.bootstrap_servers)
+        if success:
+            print(f"Successfully published processed event ({args.count} records)")
+            sys.exit(0)
+        else:
+            print(f"Failed to publish processed event")
+            sys.exit(1)
+    else:
+        parser.print_help()
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    # Run sample pipeline
-    df = create_sample_streaming_pipeline()
-    print("Sample streaming pipeline completed")
+    main()

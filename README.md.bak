@@ -340,16 +340,3 @@ docker exec -it okr_kafka kafka-console-consumer.sh \
   --topic okr_raw_ingest \
   --from-beginning
 ```
-
-## Data Ingestion & ETL
-
-The OKR ETL pipeline processes CSV files through three databases:
-- okr_raw: Raw data storage
-- okr_processed: Cleaned data
-- okr_curated: Model-ready JSON
-
-Quick start:
-1. docker-compose up -d --build
-2. Place CSV files in data/raw/
-3. Trigger okr_ingestion_etl DAG in Airflow UI (http://localhost:8081)
-4. Monitor via python scripts/etl_cli.py stats
