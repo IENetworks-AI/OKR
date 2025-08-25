@@ -166,6 +166,7 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     container_name: okr_api
+    working_dir: /app
     ports:
       - "5001:5001"
     volumes:
@@ -180,10 +181,12 @@ services:
     networks:
       - okr_net
     environment:
+      - PYTHONPATH=/app:/app/src
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - AIRFLOW_BASE_URL=http://airflow-webserver:8080
       - AIRFLOW_USER=admin
       - AIRFLOW_PASSWORD=admin
+    command: ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "2", "--worker-class", "sync", "--timeout", "120", "--keep-alive", "5", "--max-requests", "1000", "--max-requests-jitter", "100", "apps.api.app:app"]
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:5001/health || exit 1"]
       interval: 30s
