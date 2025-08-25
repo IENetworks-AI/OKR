@@ -84,8 +84,8 @@ check_prerequisites() {
     required_files=(
         "docker-compose.yml"
         "requirements.txt"
-        "api/Dockerfile"
-        "api/app.py"
+        "apps/api/Dockerfile"
+        "apps/api/app.py"
         "src/dags/"
         "configs/pipeline_config.json"
     )

@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy requirements first for better caching
-COPY api/requirements.txt /app/requirements.txt
+COPY apps/api/requirements.txt /app/requirements.txt
 COPY requirements.txt /app/full_requirements.txt
 
 # Install all dependencies
@@ -32,7 +32,7 @@ EXPOSE 5001
 
 # Set environment variables
 ENV FLASK_ENV=production
-ENV FLASK_APP=api/app.py
+ENV FLASK_APP=apps/api/app.py
 ENV PYTHONPATH=/app/src:/app
 ENV PYTHONUNBUFFERED=1
 
@@ -41,5 +41,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:5001/health || exit 1
 
 # Use gunicorn for production with proper configuration
-CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "2", "--worker-class", "sync", "--timeout", "120", "--keep-alive", "5", "--max-requests", "1000", "--max-requests-jitter", "100", "api.app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "2", "--worker-class", "sync", "--timeout", "120", "--keep-alive", "5", "--max-requests", "1000", "--max-requests-jitter", "100", "apps.api.app:app"]
 

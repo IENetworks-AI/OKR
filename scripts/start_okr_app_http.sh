@@ -19,7 +19,7 @@ fi
 echo "✅ Starting Flask app on port 80 (requires sudo for port 80)..."
 
 # Start the Flask app on port 80 (requires sudo for ports < 1024)
-sudo -E env "PATH=$PATH" python api/app.py --port 80 --host 0.0.0.0 &
+sudo -E env "PATH=$PATH" python apps/api/app.py --port 80 --host 0.0.0.0 &
 
 # Save the PID
 echo $! > okr_app_http.pid
