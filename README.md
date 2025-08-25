@@ -60,6 +60,10 @@ docker-compose ps
 - **API**: http://localhost:5001
 - **Nginx**: http://localhost:80
 
+Dashboard with controls: visit `http://localhost/` then open `/dashboard`.
+
+Airflow admin user is created by `airflow-init.sh` (admin/admin).
+
 ## 🔧 Services
 
 ### Core ML Pipeline
@@ -86,6 +90,26 @@ docker-compose ps
 - Performance evaluation
 
 ### Monitoring
+- ### CSV Ingestion (manual trigger)
+  - Discovers CSVs in `data/raw/*.csv`
+  - Cleans and writes to `data/processed/*__clean.csv`
+  - Publishes file summaries to Kafka topic `okr_data`
+
+- ### API Ingestion (manual trigger)
+  - Fetches from configured API in `configs/pipeline_config.json` → `sources.api`
+  - Stores raw JSON to `data/raw` and CSV archive to `data/processed`
+  - Emits records to Kafka topic `okr_data`
+
+Trigger both from the API dashboard or via Airflow UI.
+
+```bash
+# Trigger via API
+curl -X POST http://localhost/api/pipeline/trigger/csv_ingestion_dag
+curl -X POST http://localhost/api/pipeline/trigger/api_ingestion_dag
+
+# Check status
+curl http://localhost/api/pipeline/status
+```
 - Model performance tracking
 - Data quality checks
 - Alert generation
@@ -97,6 +121,10 @@ All services are containerized and include:
 - Proper networking
 - Volume mounts for data persistence
 - Environment-specific configurations
+
+Key environment variables:
+- `KAFKA_BOOTSTRAP_SERVERS` (default: kafka:9092)
+- `AIRFLOW_BASE_URL` (default: http://airflow-webserver:8080)
 
 ## 🔄 CI/CD
 
@@ -131,3 +159,13 @@ For issues and questions:
 - Create an issue in GitHub
 - Check the documentation
 - Review deployment logs
+
+## 🌐 Deployment with Domain
+
+1. Update Nginx server_name in `deploy/nginx/mlapi.conf` to your domain.
+2. Point DNS A record to your server IP.
+3. Start services: `docker-compose up -d --build`.
+4. Access public endpoints:
+   - `https://your-domain/` (reverse-proxied API and dashboard)
+   - `https://your-domain/api/...`
+5. Optional: Add TLS via a reverse proxy or Certbot container (not included by default).

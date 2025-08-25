@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, render_template_string
-import os, yaml, joblib, datetime, json
+import os, yaml, joblib, datetime, json, base64
+import requests
 
 app = Flask(__name__)
 
@@ -61,6 +62,10 @@ dashboard_html = """
         <p><strong>Service:</strong> mlapi</p>
         <p><strong>Model Loaded:</strong> {{ "✅ Yes" if model_loaded else "❌ No" }}</p>
         <p><strong>Last Checked:</strong> {{ now }}</p>
+        <div class="mt-3">
+          <button id="btn-refresh-status" class="btn btn-outline-secondary btn-sm">Refresh Pipeline Status</button>
+        </div>
+        <pre id="status-output" class="mt-3 bg-light p-2 border rounded" style="max-height:220px; overflow:auto;"></pre>
       </div>
     </div>
     
@@ -82,11 +87,51 @@ dashboard_html = """
         {% endif %}
       </div>
     </div>
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <h5>Pipeline Controls</h5>
+        <div class="row g-2">
+          <div class="col-md-4">
+            <button class="btn btn-primary w-100" onclick="triggerDag('csv_ingestion_dag')">Run CSV Ingestion</button>
+          </div>
+          <div class="col-md-4">
+            <button class="btn btn-primary w-100" onclick="triggerDag('api_ingestion_dag')">Run API Ingestion</button>
+          </div>
+          <div class="col-md-4">
+            <a class="btn btn-outline-primary w-100" href="/api/test-kafka" target="_blank">Test Kafka</a>
+          </div>
+        </div>
+        <pre id="trigger-output" class="mt-3 bg-light p-2 border rounded" style="max-height:180px; overflow:auto;"></pre>
+      </div>
+    </div>
     
     <footer class="text-center text-muted mt-5">
       ML API &copy; {{ year }}
     </footer>
   </div>
+<script>
+async function refreshStatus(){
+  const out = document.getElementById('status-output');
+  out.textContent = 'Loading...';
+  try{
+    const r = await fetch('/pipeline/status');
+    const j = await r.json();
+    out.textContent = JSON.stringify(j, null, 2);
+  }catch(e){ out.textContent = 'Error: ' + e; }
+}
+async function triggerDag(dag){
+  const out = document.getElementById('trigger-output');
+  out.textContent = `Triggering ${dag}...`;
+  try{
+    const r = await fetch(`/pipeline/trigger/${dag}`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({source:'dashboard'})});
+    const j = await r.json();
+    out.textContent = JSON.stringify(j, null, 2);
+  }catch(e){ out.textContent = 'Error: ' + e; }
+}
+document.getElementById('btn-refresh-status').addEventListener('click', refreshStatus);
+window.addEventListener('load', refreshStatus);
+</script>
 </body>
 </html>
 """
@@ -249,3 +294,41 @@ if __name__ == "__main__":
     print(f"📊 Dashboard available at: http://{args.host}:{args.port}/dashboard")
     
     app.run(host=args.host, port=args.port, debug=args.debug)
+
+# --- Airflow integration endpoints ---
+
+AIRFLOW_BASE_URL = os.getenv('AIRFLOW_BASE_URL', 'http://airflow-webserver:8080')
+AIRFLOW_USER = os.getenv('AIRFLOW_USER', 'admin')
+AIRFLOW_PASSWORD = os.getenv('AIRFLOW_PASSWORD', 'admin')
+
+def _airflow_headers():
+    token = base64.b64encode(f"{AIRFLOW_USER}:{AIRFLOW_PASSWORD}".encode()).decode()
+    return {
+        'Authorization': f'Basic {token}',
+        'Content-Type': 'application/json'
+    }
+
+@app.get('/pipeline/status')
+def pipeline_status():
+    try:
+        dags = ['csv_ingestion_dag', 'api_ingestion_dag']
+        status = {}
+        for dag_id in dags:
+            url = f"{AIRFLOW_BASE_URL}/api/v1/dags/{dag_id}"
+            r = requests.get(url, headers=_airflow_headers(), timeout=10)
+            status[dag_id] = r.json() if r.ok else {"error": r.text}
+        return jsonify({"airflow": AIRFLOW_BASE_URL, "dags": status})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post('/pipeline/trigger/<dag_id>')
+def trigger_dag(dag_id: str):
+    try:
+        url = f"{AIRFLOW_BASE_URL}/api/v1/dags/{dag_id}/dagRuns"
+        payload = {"conf": request.get_json(silent=True) or {}}
+        r = requests.post(url, headers=_airflow_headers(), json=payload, timeout=10)
+        if not r.ok:
+            return jsonify({"error": r.text}), r.status_code
+        return jsonify(r.json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

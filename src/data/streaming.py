@@ -24,7 +24,27 @@ class KafkaStreamManager:
     """Manages Kafka streaming operations"""
     
     def __init__(self, bootstrap_servers: str = 'localhost:9092'):
-        self.bootstrap_servers = bootstrap_servers
+        # Prefer env var, then config file, then default
+        import os, json
+        self.bootstrap_servers = os.getenv('KAFKA_BOOTSTRAP_SERVERS', bootstrap_servers)
+        try:
+            cfg_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'configs', 'pipeline_config.json')
+            alt_paths = [
+                cfg_path,
+                '/workspace/configs/pipeline_config.json',
+                '/app/configs/pipeline_config.json',
+                '/opt/airflow/configs/pipeline_config.json'
+            ]
+            for p in alt_paths:
+                if os.path.exists(p):
+                    with open(p, 'r') as f:
+                        cfg = json.load(f)
+                    ks = cfg.get('kafka', {}).get('bootstrap_servers')
+                    if ks:
+                        self.bootstrap_servers = ks
+                    break
+        except Exception:
+            pass
         self.producer = None
         self.consumers = {}
         self.running = False

@@ -13,7 +13,7 @@
     "archive_directory": "data/archive"
   },
   "kafka": {
-    "bootstrap_servers": "localhost:9092",
+    "bootstrap_servers": "kafka:9092",
     "topics": {
       "okr_data": "okr_data",
       "model_updates": "model_updates",
@@ -56,5 +56,17 @@
     "port": 5001,
     "debug": false,
     "workers": 4
+  },
+  "sources": {
+    "csv": {
+      "directory": "data/raw",
+      "pattern": "*.csv"
+    },
+    "api": {
+      "base_url": "https://api.publicapis.org",
+      "endpoint": "/entries",
+      "method": "GET",
+      "params": {}
+    }
   }
 }

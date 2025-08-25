@@ -108,12 +108,14 @@ services:
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC
       - AIRFLOW__WEBSERVER__HOST=0.0.0.0
       - AIRFLOW__WEBSERVER__PORT=8080
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - PYTHONPATH=/opt/airflow/src:/opt/airflow
     user: "50000:0"
     volumes:
       - ./src/dags:/opt/airflow/dags
       - ./src:/opt/airflow/src
       - ./data:/opt/airflow/data
+      - ./configs:/opt/airflow/configs
       - ./logs:/opt/airflow/logs
       - ./airflow-init.sh:/airflow-init.sh
     ports:
@@ -144,12 +146,14 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - PYTHONPATH=/opt/airflow/src:/opt/airflow
     user: "50000:0"
     volumes:
       - ./src/dags:/opt/airflow/dags
       - ./src:/opt/airflow/src
       - ./data:/opt/airflow/data
+      - ./configs:/opt/airflow/configs
       - ./logs:/opt/airflow/logs
     restart: always
     networks:
@@ -175,6 +179,11 @@ services:
     restart: always
     networks:
       - okr_net
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - AIRFLOW_BASE_URL=http://airflow-webserver:8080
+      - AIRFLOW_USER=admin
+      - AIRFLOW_PASSWORD=admin
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:5001/health || exit 1"]
       interval: 30s
