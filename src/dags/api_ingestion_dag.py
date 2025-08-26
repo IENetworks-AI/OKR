@@ -7,7 +7,7 @@ and emit records to Kafka for downstream consumers.
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.utils.dates import days_ago
+from datetime import datetime
 from datetime import timedelta
 import os
 import json
@@ -23,7 +23,7 @@ from data.streaming import KafkaStreamManager  # type: ignore
 DEFAULT_ARGS = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': days_ago(1),
+    'start_date': datetime(2024, 1, 1),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -136,26 +136,23 @@ with DAG(
     dag_id='api_ingestion_dag',
     default_args=DEFAULT_ARGS,
     description='Fetch live API data, archive to CSV, and emit to Kafka',
-    schedule_interval=None,
+    schedule=None,
     catchup=False,
 ) as dag:
 
     t_fetch = PythonOperator(
         task_id='fetch_api',
         python_callable=fetch_api,
-        provide_context=True,
     )
 
     t_archive = PythonOperator(
         task_id='archive_to_csv',
         python_callable=archive_to_csv,
-        provide_context=True,
     )
 
     t_emit = PythonOperator(
         task_id='emit_to_kafka',
         python_callable=emit_to_kafka,
-        provide_context=True,
     )
 
     t_fetch >> t_archive >> t_emit

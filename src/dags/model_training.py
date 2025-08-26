@@ -9,7 +9,7 @@ This DAG handles the complete ML model training pipeline including:
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.utils.dates import days_ago
+from datetime import datetime
 from datetime import datetime, timedelta
 import sys
 import os
@@ -27,7 +27,7 @@ from utils.helpers import ensure_directory, generate_timestamp
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': days_ago(1),
+    'start_date': datetime(2024, 1, 1),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -208,7 +208,7 @@ dag = DAG(
     'model_training_pipeline',
     default_args=default_args,
     description='Complete ML model training and updating pipeline',
-    schedule_interval=timedelta(days=1),  # Run daily
+    schedule=timedelta(days=1),  # Run daily
     catchup=False,
     tags=['ml', 'training', 'okr']
 )

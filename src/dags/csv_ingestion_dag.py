@@ -8,8 +8,7 @@ optionally publishes summary messages to Kafka.
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.utils.dates import days_ago
-from datetime import timedelta
+from datetime import datetime, timedelta
 import os
 import glob
 import json
@@ -25,7 +24,7 @@ from data.streaming import KafkaStreamManager  # type: ignore
 DEFAULT_ARGS = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': days_ago(1),
+    'start_date': datetime(2024, 1, 1),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -120,26 +119,23 @@ with DAG(
     dag_id='csv_ingestion_dag',
     default_args=DEFAULT_ARGS,
     description='Ingest static CSV files and publish summaries to Kafka',
-    schedule_interval=None,
+    schedule=None,
     catchup=False,
 ) as dag:
 
     t_discover = PythonOperator(
         task_id='discover_csv_files',
         python_callable=discover_csv_files,
-        provide_context=True,
     )
 
     t_process = PythonOperator(
         task_id='process_and_store',
         python_callable=process_and_store,
-        provide_context=True,
     )
 
     t_publish = PythonOperator(
         task_id='publish_summaries',
         python_callable=publish_summaries,
-        provide_context=True,
     )
 
     t_discover >> t_process >> t_publish

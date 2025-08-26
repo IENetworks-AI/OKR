@@ -12,7 +12,7 @@ This DAG handles the complete data ingestion and ETL pipeline for OKR data:
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.utils.dates import days_ago
+from datetime import datetime
 from airflow.models import Variable
 from datetime import datetime, timedelta
 import sys
@@ -54,7 +54,7 @@ except Exception as e:
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': days_ago(1),
+    'start_date': datetime(2024, 1, 1),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': config.get('airflow', {}).get('dag_config', {}).get('retries', 2),
@@ -356,7 +356,7 @@ dag = DAG(
     'okr_ingestion_etl',
     default_args=default_args,
     description='OKR data ingestion and ETL pipeline',
-    schedule_interval='@daily',  # Run daily
+    schedule='@daily',  # Run daily
     max_active_runs=1,  # Only one run at a time
     catchup=False,
     tags=['etl', 'data', 'okr', 'ingestion'],

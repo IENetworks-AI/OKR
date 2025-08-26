@@ -10,7 +10,7 @@ This DAG handles continuous monitoring of the ML pipeline:
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.utils.dates import days_ago
+from datetime import datetime
 from datetime import datetime, timedelta
 import sys
 import os
@@ -26,7 +26,7 @@ from utils.helpers import ensure_directory, generate_timestamp, load_dataframe, 
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': days_ago(1),
+    'start_date': datetime(2024, 1, 1),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -254,7 +254,7 @@ dag = DAG(
     'monitoring_pipeline',
     default_args=default_args,
     description='Continuous monitoring of ML pipeline health and performance',
-    schedule_interval=timedelta(hours=2),  # Run every 2 hours
+    schedule=timedelta(hours=2),  # Run every 2 hours
     catchup=False,
     tags=['monitoring', 'alerts', 'health']
 )
