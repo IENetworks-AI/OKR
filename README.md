@@ -2,6 +2,38 @@
 
 A modern machine learning pipeline that automatically updates ML models using streaming data from Kafka, orchestrated by Airflow, with experiment tracking via MLflow.
 
+## 🚀 Quick Start (FIXED & READY!)
+
+**All issues have been resolved! The workflow is now fully functional.**
+
+### Start Everything with One Command:
+```bash
+./start-workflow.sh
+```
+
+### Access Points:
+- **Airflow UI**: http://localhost:8081 (admin/admin)
+- **Main API**: http://localhost:80
+- **Kafka UI**: http://localhost:8085  
+- **MLflow**: http://localhost:5000
+
+### Manual Start (if preferred):
+```bash
+# 1. Start databases
+docker compose up -d airflow-db postgres redis
+
+# 2. Start Kafka (wait 60s)
+docker compose up -d kafka
+
+# 3. Start Airflow (wait 30s)
+docker compose up -d airflow-webserver airflow-scheduler
+
+# 4. Start remaining services
+docker compose up -d api nginx kafka-ui mlflow oracle
+```
+
+---
+
 ## 🏗️ Project Structure
 
 ```
@@ -31,38 +63,6 @@ OKR/
 ├── docker-compose.yml          # Docker services
 └── requirements.txt            # Python dependencies
 ```
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Docker and Docker Compose
-- Python 3.8+
-- Git
-
-### 1. Clone and Setup
-```bash
-git clone <your-repo-url>
-cd OKR
-```
-
-### 2. Start Services
-```bash
-# Build and start all services
-docker-compose up -d --build
-
-# Check service status
-docker-compose ps
-```
-
-### 3. Access Services
-- **Airflow**: http://localhost:8081 (airflow/airflow)
-- **Kafka UI**: http://localhost:8085
-- **API**: http://localhost:5001
-- **Nginx**: http://localhost:80
-
-Dashboard with controls: visit `http://localhost/` then open `/dashboard`.
-
-Airflow admin user is created by `airflow-init.sh` (admin/admin).
 
 ## 🔧 Services
 
