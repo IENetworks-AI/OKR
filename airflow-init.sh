@@ -15,51 +15,23 @@ until pg_isready -h airflow-db -U airflow; do
 done
 echo "Database is ready!"
 
-# Initialize Airflow database
+# Initialize Airflow database (idempotent)
 echo "Initializing Airflow database..."
 airflow db init
 
-# Create admin user for external access
-echo "Creating admin user..."
+# Create admin user for external access (idempotent)
+echo "Creating admin user if missing..."
 airflow users create \
     --username admin \
     --firstname Admin \
     --lastname User \
     --role Admin \
     --email admin@okr-project.com \
-    --password admin \
-    --firstname Admin \
-    --lastname User \
-    --role Admin \
-    --email admin@okr-project.com \
-    --password admin
+    --password admin || true
 
-# Set up connections (if needed)
-echo "Setting up Airflow connections..."
+# Set up variables (best-effort)
+echo "Setting up Airflow variables..."
 airflow variables set KAFKA_BOOTSTRAP_SERVERS "${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}" || true
 airflow variables set PIPELINE_CONFIG_PATH "/opt/airflow/configs/pipeline_config.json" || true
 
-# Start Airflow webserver
-echo "Starting Airflow webserver..."
-airflow webserver --port 8080 --hostname 0.0.0.0 &
-
-# Wait for webserver to start
-echo "Waiting for Airflow webserver to start..."
-sleep 15
-
-# Check if webserver is running
-echo "Checking Airflow webserver status..."
-if pgrep -f "airflow webserver" > /dev/null; then
-    echo "✓ Airflow webserver is running"
-else
-    echo "✗ Airflow webserver failed to start"
-    exit 1
-fi
-
 echo "=== Airflow Initialization Completed Successfully ==="
-echo "Web UI available at: http://0.0.0.0:8080"
-echo "Username: admin"
-echo "Password: admin"
-
-# Keep the script running
-tail -f /dev/null

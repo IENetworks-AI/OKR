@@ -113,6 +113,37 @@ services:
     networks:
       - okr_net
 
+  # Airflow one-off initializer
+  airflow-init:
+    image: apache/airflow:2.9.2
+    container_name: okr_airflow_init
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=30e6QztCFtuew7bCiQUZiomQd0eq2eWwHf39LaQyBaU=
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
+      - AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - PYTHONPATH=/opt/airflow/src:/opt/airflow
+      - _AIRFLOW_WWW_USER_USERNAME=admin
+      - _AIRFLOW_WWW_USER_PASSWORD=admin
+    user: "50000:0"
+    volumes:
+      - ./src/dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./configs:/opt/airflow/configs
+      - ./logs:/opt/airflow/logs
+      - ./airflow-init.sh:/airflow-init.sh
+    entrypoint: ["/bin/bash", "-c"]
+    command: ["/airflow-init.sh"]
+    networks:
+      - okr_net
+    restart: "no"
+
   # Airflow webserver
   airflow-webserver:
     image: apache/airflow:2.9.2
@@ -120,6 +151,8 @@ services:
     depends_on:
       airflow-db:
         condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
       kafka:
         condition: service_healthy
       postgres:
@@ -172,6 +205,8 @@ services:
     depends_on:
       airflow-db:
         condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
       kafka:
         condition: service_healthy
       postgres:
