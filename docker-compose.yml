@@ -42,7 +42,7 @@ services:
       retries: 20
       start_period: 180s
 
-  # Redis for Airflow (optional but recommended)
+  # Redis for Airflow
   redis:
     image: redis:7-alpine
     container_name: okr_redis
@@ -88,7 +88,7 @@ services:
     networks:
       - okr_net
     healthcheck:
-      test: ["CMD-SHELL", "/opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      test: ["CMD-SHELL", "/opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
       interval: 60s
       timeout: 20s
       retries: 15
@@ -113,7 +113,7 @@ services:
     networks:
       - okr_net
 
-# Airflow webserver
+  # Airflow webserver
   airflow-webserver:
     image: apache/airflow:2.9.2
     container_name: okr_airflow_webserver
@@ -133,7 +133,7 @@ services:
       - AIRFLOW__WEBSERVER__RBAC=true
       - AIRFLOW__WEBSERVER__AUTHENTICATE=true
       - AIRFLOW__WEBSERVER__AUTH_BACKEND=airflow.auth.backend.basic_auth
-      - AIRFLOW__WEBSERVER__WORKERS=2  # <-- ADD THIS LINE to reduce resource usage
+      - AIRFLOW__WEBSERVER__WORKERS=2
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC
@@ -167,8 +167,8 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 60s
+      retries: 10
+      start_period: 120s
 
   # Airflow scheduler
   airflow-scheduler:
@@ -206,11 +206,11 @@ services:
       - okr_net
     command: ["airflow", "scheduler"]
     healthcheck:
-      test: ["CMD-SHELL", "airflow jobs check --hostname localhost"]
+      test: ["CMD-SHELL", "airflow jobs check --hostname $(hostname) || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 60s
+      retries: 10
+      start_period: 120s
 
   # Flask API
   api:
@@ -263,10 +263,11 @@ services:
     networks:
       - okr_net
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/health >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 30s
 
   # Oracle XE database
   oracle:
