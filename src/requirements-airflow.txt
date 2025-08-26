@@ -1,3 +1,9 @@
 scikit-learn
 kafka-python
 joblib
+pandas
+numpy
+pyyaml
+requests
+sqlalchemy
+psycopg2-binary

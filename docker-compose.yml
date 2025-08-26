@@ -149,6 +149,7 @@ services:
       - _AIRFLOW_WWW_USER_CREATE=true
       - _AIRFLOW_WWW_USER_USERNAME=admin
       - _AIRFLOW_WWW_USER_PASSWORD=admin
+      - _PIP_ADDITIONAL_REQUIREMENTS=-r /opt/airflow/src/requirements-airflow.txt
     user: "50000:0"
     volumes:
       - ./src/dags:/opt/airflow/dags
@@ -194,6 +195,7 @@ services:
       - POSTGRES_USER=okr_admin
       - POSTGRES_PASSWORD=okr_password
       - POSTGRES_PORT=5432
+      - _PIP_ADDITIONAL_REQUIREMENTS=-r /opt/airflow/src/requirements-airflow.txt
     user: "50000:0"
     volumes:
       - ./src/dags:/opt/airflow/dags
@@ -295,7 +297,7 @@ services:
 
   # MLflow tracking server
   mlflow:
-    image: python:3.11-slim
+    image: ghcr.io/mlflow/mlflow:v2.14.1
     container_name: okr_mlflow
     ports:
       - "5000:5000"
@@ -311,11 +313,17 @@ services:
       - MLFLOW_TRACKING_USERNAME=mlflow
       - MLFLOW_TRACKING_PASSWORD=mlflow
     command: >
-      bash -c "pip install mlflow psycopg2-binary &&
+      bash -c "pip install --no-cache-dir psycopg2-binary && \
                mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri postgresql://airflow:airflow@airflow-db:5432/airflow --default-artifact-root /mlflow"
     restart: always
     networks:
       - okr_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/api/2.0/mlflow/experiments/list >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
 
 volumes:
   airflow_db_data:
