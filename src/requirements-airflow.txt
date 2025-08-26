@@ -1,0 +1,3 @@
+scikit-learn
+kafka-python
+joblib
