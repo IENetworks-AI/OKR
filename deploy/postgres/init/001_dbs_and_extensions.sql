@@ -1,8 +1,10 @@
+
 -- PostgreSQL initialization script for OKR ETL pipeline
 -- Creates three databases: okr_raw, okr_processed, okr_curated
 -- Sets up tables and extensions for data ingestion pipeline
 
 -- Create databases
+
 CREATE DATABASE okr_raw;
 CREATE DATABASE okr_processed;
 CREATE DATABASE okr_curated;
@@ -126,3 +128,4 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO okr_admin;
 
 -- Final message
 SELECT 'OKR ETL databases and tables created successfully' AS status;
+

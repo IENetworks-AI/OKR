@@ -440,3 +440,106 @@ class DataPreprocessor:
         
         logger.info("Data preprocessing pipeline completed successfully")
         return df_scaled, target
+
+# ---------------------------------------------------------------------------
+# New pure functions for ingestion / ETL (lossless, side-effect free)
+# ---------------------------------------------------------------------------
+import hashlib
+import csv
+from pathlib import Path
+from typing import Iterable, Dict, Tuple, List
+
+_JSONRow = Dict[str, any]
+
+
+def read_csv_to_json_rows(path: str, *, encoding: str = "utf-8", errors: str = "ignore") -> Iterable[_JSONRow]:
+    """Stream rows from CSV `path`, returning each as a dict (JSON-serialisable).
+
+    The function is a generator and therefore *lazy* – suitable for large files.
+    It keeps the header order, converts empty strings to `None`, and attempts to
+    cast numerics when that is lossless (e.g. "123" -> int).
+    """
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(path)
+
+    with p.open("r", encoding=encoding, errors=errors, newline="") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            clean = {}
+            for k, v in row.items():
+                if v == "":
+                    clean[k] = None
+                    continue
+                # best-effort numeric cast
+                if v.isdigit():
+                    try:
+                        clean[k] = int(v)
+                        continue
+                    except ValueError:
+                        pass
+                try:
+                    clean[k] = float(v)
+                    continue
+                except ValueError:
+                    pass
+                clean[k] = v
+            yield clean
+
+
+def _sha256_of_row(row: _JSONRow) -> str:
+    return hashlib.sha256(json.dumps(row, sort_keys=True).encode()).hexdigest()
+
+
+def validate_and_clean(row: _JSONRow) -> Tuple[_JSONRow, bool]:
+    """Simple validation / cleaning rules.
+
+    Returns `(clean_row, is_valid)`.
+    Criteria are domain-agnostic for now: ensure at least one non-null value and
+    drop leading/trailing whitespace from str fields.
+    """
+    if not isinstance(row, dict):
+        return {}, False
+
+    cleaned = {k: (v.strip() if isinstance(v, str) else v) for k, v in row.items()}
+
+    non_nulls = any(v not in (None, "") for v in cleaned.values())
+    return cleaned, bool(non_nulls)
+
+
+from datetime import datetime
+import json
+
+def to_model_json(clean_row: _JSONRow) -> Dict[str, any]:
+    """Convert a cleaned row into model-ready JSON structure.
+
+    This default implementation concatenates all string columns into a single
+    `text` field while preserving the original row under `meta`.
+    """
+    text_parts = [str(v) for v in clean_row.values() if isinstance(v, str)]
+    text = "\n".join(text_parts)
+    return {
+        "text": text,
+        "meta": {
+            "source_row": clean_row,
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+        },
+    }
+
+
+def chunk_text(text: str, max_tokens: int = 512, overlap: int = 64) -> List[str]:
+    """Very simple token-agnostic chunking by word count heuristic.
+
+    Splits text into roughly *max_tokens* words (not true tokens) with *overlap*
+    words overlap. Suitable as placeholder until tokenizer available.
+    """
+    words = text.split()
+    if not words:
+        return []
+
+    chunks = []
+    step = max_tokens - overlap
+    for i in range(0, len(words), step):
+        chunk = words[i : i + max_tokens]
+        chunks.append(" ".join(chunk))
+    return chunks
