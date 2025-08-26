@@ -36,7 +36,7 @@ services:
     networks:
       - okr_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U okr_admin -d okr_raw"]
+      test: ["CMD-SHELL", "pg_isready -U okr_admin -d postgres"]
       interval: 30s
       timeout: 10s
       retries: 20

@@ -1,10 +1,8 @@
-
 -- PostgreSQL initialization script for OKR ETL pipeline
 -- Creates three databases: okr_raw, okr_processed, okr_curated
 -- Sets up tables and extensions for data ingestion pipeline
 
 -- Create databases
-
 CREATE DATABASE okr_raw;
 CREATE DATABASE okr_processed;
 CREATE DATABASE okr_curated;
@@ -98,14 +96,13 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO okr_admin;
 
 \c okr_curated;
 
--- CREATE EXTENSION IF NOT EXISTS vector;
-
+-- Embeddings disabled for now (pgvector not installed)
 CREATE TABLE IF NOT EXISTS public.documents (
     doc_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source TEXT NOT NULL, -- reference to source file/record
     text TEXT NOT NULL,
     meta JSONB NOT NULL,
-    embedding vector(768) NULL, -- prepared for future embedding storage
+    embedding BYTEA NULL, -- placeholder until pgvector is enabled
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -113,8 +110,6 @@ CREATE TABLE IF NOT EXISTS public.documents (
 CREATE INDEX IF NOT EXISTS idx_documents_source ON public.documents(source);
 CREATE INDEX IF NOT EXISTS idx_documents_created_at ON public.documents(created_at);
 CREATE INDEX IF NOT EXISTS idx_documents_meta_gin ON public.documents USING GIN(meta);
--- Prepared IVFFlat index for embeddings (commented out until embeddings are populated)
--- CREATE INDEX IF NOT EXISTS idx_documents_embedding_ivfflat ON public.documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 -- Grant permissions on okr_curated
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO okr_admin;
@@ -125,4 +120,3 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO okr_admin;
 
 -- Final message
 SELECT 'OKR ETL databases and tables created successfully' AS status;
-
