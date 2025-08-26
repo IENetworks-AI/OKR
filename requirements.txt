@@ -50,3 +50,4 @@ flask-cors>=3.0.10
 joblib>=1.2.0
 xgboost>=1.6.0
 lightgbm>=3.3.0
+pytest

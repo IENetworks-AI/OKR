@@ -30,7 +30,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deploy/postgres/init:/docker-entrypoint-initdb.d
-    ports:   # ✅ correct place
+    ports:
       - "5433:5432"
     restart: always
     networks:
@@ -113,7 +113,7 @@ services:
     networks:
       - okr_net
 
-  # Airflow webserver
+# Airflow webserver
   airflow-webserver:
     image: apache/airflow:2.9.2
     container_name: okr_airflow_webserver
@@ -133,6 +133,7 @@ services:
       - AIRFLOW__WEBSERVER__RBAC=true
       - AIRFLOW__WEBSERVER__AUTHENTICATE=true
       - AIRFLOW__WEBSERVER__AUTH_BACKEND=airflow.auth.backend.basic_auth
+      - AIRFLOW__WEBSERVER__WORKERS=2  # <-- ADD THIS LINE to reduce resource usage
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC
@@ -144,7 +145,7 @@ services:
       - POSTGRES_USER=okr_admin
       - POSTGRES_PASSWORD=okr_password
       - POSTGRES_PORT=5432
-      - _AIRFLOW_DB_UPGRADE=true
+      - _AIRFLOW_DB_MIGRATE=true
       - _AIRFLOW_WWW_USER_CREATE=true
       - _AIRFLOW_WWW_USER_USERNAME=admin
       - _AIRFLOW_WWW_USER_PASSWORD=admin
