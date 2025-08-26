@@ -39,8 +39,8 @@ services:
       test: ["CMD-SHELL", "pg_isready -U okr_admin -d okr_raw"]
       interval: 30s
       timeout: 10s
-      retries: 10
-      start_period: 60s
+      retries: 20
+      start_period: 180s
 
   # Redis for Airflow (optional but recommended)
   redis:
