@@ -25,6 +25,7 @@ GRANT ALL PRIVILEGES ON DATABASE okr_curated TO okr_admin;
 
 -- Connect to okr_raw database and create tables
 \c okr_raw;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Files metadata table
 CREATE TABLE IF NOT EXISTS public.files (
@@ -59,6 +60,7 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO okr_admin;
 
 -- Connect to okr_processed database and create tables
 \c okr_processed;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Processed records table (normalized schema)
 CREATE TABLE IF NOT EXISTS public.records_clean (
@@ -97,7 +99,7 @@ GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO okr_admin;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO okr_admin;
 
 \c okr_curated;
-
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE IF NOT EXISTS public.documents (

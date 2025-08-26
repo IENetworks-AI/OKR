@@ -236,11 +236,25 @@ def get_okrs():
 def generate_sample_data():
     """Generate sample OKR data"""
     try:
-        # Run the sample data generator script
         import subprocess
-        result = subprocess.run(['python3', 'scripts/generate_sample_data.py'], 
-                              capture_output=True, text=True, cwd='..')
-        
+        import pathlib
+
+        # Resolve repository root robustly
+        candidates = [
+            pathlib.Path('/app'),
+            pathlib.Path.cwd(),
+            pathlib.Path(__file__).resolve().parents[2],  # /app from apps/api/app.py
+        ]
+        script_path = None
+        for base in candidates:
+            p = base / 'scripts' / 'generate_sample_data.py'
+            if p.exists():
+                script_path = p
+                break
+        if script_path is None:
+            return jsonify({"error": "generate_sample_data.py not found"}), 404
+
+        result = subprocess.run(['python3', str(script_path)], capture_output=True, text=True, cwd=str(script_path.parent))
         if result.returncode == 0:
             return jsonify({"message": "Sample data generated successfully", "output": result.stdout})
         else:
@@ -252,33 +266,44 @@ def generate_sample_data():
 def test_kafka():
     """Test Kafka connection"""
     try:
-        # Check if Kafka is running
-        import subprocess
-        result = subprocess.run(['curl', '-s', 'kafka:9092'], 
-                              capture_output=True, text=True, timeout=5)
-        
-        if result.returncode == 0:
-            return jsonify({"message": "Kafka is running", "status": "healthy"})
-        else:
-            return jsonify({"message": "Kafka is not responding", "status": "unhealthy"})
+        import socket
+        import urllib.parse
+
+        # Prefer env var if provided
+        bootstrap = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'kafka:9092')
+        # In case multiple are provided, take the first
+        first_server = bootstrap.split(',')[0].strip()
+        # Allow forms like PLAINTEXT://kafka:9092
+        if '://' in first_server:
+            first_server = urllib.parse.urlparse(first_server).netloc or first_server
+        host, port_str = (first_server.split(':', 1) + ['9092'])[:2]
+        port = int(port_str)
+
+        with socket.create_connection((host, port), timeout=5):
+            return jsonify({"message": "Kafka TCP reachable", "status": "healthy", "bootstrap": bootstrap})
     except Exception as e:
-        return jsonify({"message": f"Kafka test failed: {str(e)}", "status": "error"})
+        return jsonify({"message": f"Kafka connectivity failed: {str(e)}", "status": "error"}), 500
+
 
 @app.get("/api/test-airflow")
 def test_airflow():
-    """Test Airflow connection"""
+    """Test Airflow connection using configured AIRFLOW_BASE_URL"""
     try:
-        # Check if Airflow is running
-        import subprocess
-        result = subprocess.run(['curl', '-s', 'airflow:8080'], 
-                              capture_output=True, text=True, timeout=5)
-        
-        if result.returncode == 0:
-            return jsonify({"message": "Airflow is running", "status": "healthy"})
-        else:
-            return jsonify({"message": "Airflow is not responding", "status": "unhealthy"})
+        base_url = os.getenv('AIRFLOW_BASE_URL', 'http://airflow-webserver:8080').rstrip('/')
+        # Prefer the dedicated health endpoint if available
+        health_url_candidates = [f"{base_url}/health", base_url]
+        last_error = None
+        for url in health_url_candidates:
+            try:
+                r = requests.get(url, headers=_airflow_headers(), timeout=5)
+                if r.ok:
+                    return jsonify({"message": "Airflow reachable", "status": "healthy", "url": url, "response": r.json() if 'application/json' in r.headers.get('Content-Type','') else r.text[:200]})
+                last_error = f"HTTP {r.status_code}: {r.text[:200]}"
+            except Exception as inner:
+                last_error = str(inner)
+        return jsonify({"message": f"Airflow not reachable: {last_error}", "status": "unhealthy", "base_url": base_url}), 502
     except Exception as e:
-        return jsonify({"message": f"Airflow test failed: {str(e)}", "status": "error"})
+        return jsonify({"message": f"Airflow test failed: {str(e)}", "status": "error"}), 500
 
 if __name__ == "__main__":
     import argparse

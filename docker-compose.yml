@@ -148,6 +148,7 @@ services:
       - _AIRFLOW_WWW_USER_CREATE=true
       - _AIRFLOW_WWW_USER_USERNAME=admin
       - _AIRFLOW_WWW_USER_PASSWORD=admin
+      - PIP_ADDITIONAL_REQUIREMENTS=kafka-python pandas numpy pyyaml requests joblib scikit-learn
     user: "50000:0"
     volumes:
       - ./src/dags:/opt/airflow/dags
@@ -193,6 +194,7 @@ services:
       - POSTGRES_USER=okr_admin
       - POSTGRES_PASSWORD=okr_password
       - POSTGRES_PORT=5432
+      - PIP_ADDITIONAL_REQUIREMENTS=kafka-python pandas numpy pyyaml requests joblib scikit-learn
     user: "50000:0"
     volumes:
       - ./src/dags:/opt/airflow/dags
