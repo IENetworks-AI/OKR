@@ -115,7 +115,9 @@ services:
 
   # Airflow webserver
   airflow-webserver:
-    image: apache/airflow:2.9.2
+    build:
+      context: .
+      dockerfile: airflow.Dockerfile
     container_name: okr_airflow_webserver
     depends_on:
       airflow-db:
@@ -172,7 +174,9 @@ services:
 
   # Airflow scheduler
   airflow-scheduler:
-    image: apache/airflow:2.9.2
+    build:
+      context: .
+      dockerfile: airflow.Dockerfile
     container_name: okr_airflow_scheduler
     depends_on:
       airflow-db:
@@ -311,11 +315,18 @@ services:
       - MLFLOW_TRACKING_USERNAME=mlflow
       - MLFLOW_TRACKING_PASSWORD=mlflow
     command: >
-      bash -c "pip install mlflow psycopg2-binary &&
+      bash -c "apt-get update && apt-get install -y gcc g++ && 
+               pip install --no-cache-dir mlflow==2.8.1 psycopg2-binary==2.9.9 &&
                mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri postgresql://airflow:airflow@airflow-db:5432/airflow --default-artifact-root /mlflow"
     restart: always
     networks:
       - okr_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
 
 volumes:
   airflow_db_data:
