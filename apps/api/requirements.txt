@@ -1,4 +1,3 @@
-# API Service Dependencies
 flask==2.2.5
 gunicorn==22.0.0
 requests==2.31.0

@@ -9,7 +9,6 @@ services:
       POSTGRES_DB: airflow
     volumes:
       - airflow_db_data:/var/lib/postgresql/data
-  postgres_data:
     restart: always
     networks:
       - okr_net
@@ -58,11 +57,7 @@ services:
 
   # Kafka with KRaft mode
   kafka:
-      postgres:
-        condition: service_healthy
     image: bitnami/kafka:latest
-      postgres:
-        condition: service_healthy
     container_name: okr_kafka
     hostname: kafka
     environment:
@@ -71,11 +66,7 @@ services:
       - KAFKA_CFG_NODE_ID=1
       - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
       - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
-      postgres:
-        condition: service_healthy
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
-      postgres:
-        condition: service_healthy
       - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
       - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
       - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
@@ -90,11 +81,14 @@ services:
       - kafka_data:/bitnami/kafka
     restart: always
     depends_on:
-      - airflow-db
+      airflow-db:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
     networks:
       - okr_net
     healthcheck:
-      test: ["CMD-SHELL", "/opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      test: ["CMD-SHELL", "/opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
       interval: 60s
       timeout: 20s
       retries: 15
@@ -109,13 +103,11 @@ services:
     environment:
       - KAFKA_CLUSTERS_0_NAME=okr
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
-      postgres:
-        condition: service_healthy
       - KAFKA_CLUSTERS_0_READONLY=false
     depends_on:
       kafka:
-      postgres:
         condition: service_healthy
+      postgres:
         condition: service_healthy
     restart: always
     networks:
@@ -129,8 +121,8 @@ services:
       airflow-db:
         condition: service_healthy
       kafka:
-      postgres:
         condition: service_healthy
+      postgres:
         condition: service_healthy
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
@@ -147,13 +139,7 @@ services:
       - AIRFLOW__WEBSERVER__HOST=0.0.0.0
       - AIRFLOW__WEBSERVER__PORT=8080
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      postgres:
-        condition: service_healthy
       - PYTHONPATH=/opt/airflow/src:/opt/airflow
-      - POSTGRES_HOST=postgres
-      - POSTGRES_USER=okr_admin
-      - POSTGRES_PASSWORD=okr_password
-      - POSTGRES_PORT=5432
       - POSTGRES_HOST=postgres
       - POSTGRES_USER=okr_admin
       - POSTGRES_PASSWORD=okr_password
@@ -186,8 +172,8 @@ services:
       airflow-db:
         condition: service_healthy
       kafka:
-      postgres:
         condition: service_healthy
+      postgres:
         condition: service_healthy
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
@@ -197,13 +183,7 @@ services:
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      postgres:
-        condition: service_healthy
       - PYTHONPATH=/opt/airflow/src:/opt/airflow
-      - POSTGRES_HOST=postgres
-      - POSTGRES_USER=okr_admin
-      - POSTGRES_PASSWORD=okr_password
-      - POSTGRES_PORT=5432
       - POSTGRES_HOST=postgres
       - POSTGRES_USER=okr_admin
       - POSTGRES_PASSWORD=okr_password
@@ -219,6 +199,12 @@ services:
     networks:
       - okr_net
     command: ["airflow", "scheduler"]
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --hostname localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   # Flask API
   api:
@@ -234,8 +220,8 @@ services:
       - ./data:/app/data
     depends_on:
       kafka:
-      postgres:
         condition: service_healthy
+      postgres:
         condition: service_healthy
       airflow-db:
         condition: service_healthy
@@ -245,8 +231,6 @@ services:
     environment:
       - PYTHONPATH=/app:/app/src
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      postgres:
-        condition: service_healthy
       - AIRFLOW_BASE_URL=http://airflow-webserver:8080
       - AIRFLOW_USER=admin
       - AIRFLOW_PASSWORD=admin
@@ -296,7 +280,7 @@ services:
     networks:
       - okr_net
     healthcheck:
-      test: ["CMD-SHELL", "sqlplus -L okr_user/okr_password@localhost:1521/OKR as sysdba -c 'SELECT 1 FROM DUAL' || exit 1"]
+      test: ["CMD-SHELL", "echo 'SELECT 1 FROM DUAL;' | sqlplus -s okr_user/okr_password@//localhost:1521/OKR"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -313,7 +297,8 @@ services:
       - mlflow_data:/mlflow
     working_dir: /app
     depends_on:
-      - airflow-db
+      airflow-db:
+        condition: service_healthy
     environment:
       - MLFLOW_TRACKING_URI=http://localhost:5000
       - MLFLOW_TRACKING_USERNAME=mlflow
