@@ -27,7 +27,7 @@ from typing import List, Dict, Any
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from data.preprocessing import read_csv_to_json_rows, validate_and_clean, to_model_json, chunk_text
-from data.streaming import publish_ingest_event, publish_processed_event
+from data.streaming import publish_ingest_event, publish_processed_event as publish_processed_event_kafka
 from utils.db import (
     get_db_connection, upsert_file_metadata, copy_json_records_to_raw,
     get_unprocessed_files, get_raw_records, insert_processed_records,
@@ -337,7 +337,7 @@ def publish_processed_event(**context):
         
         # Publish event with combined count
         total_processed = loaded_count + curated_count
-        success = publish_processed_event(total_processed)
+        success = publish_processed_event_kafka(total_processed)
         
         if success:
             return f"Published processed event: {total_processed} records"
