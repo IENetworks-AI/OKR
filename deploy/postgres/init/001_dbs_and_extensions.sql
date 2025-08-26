@@ -96,13 +96,10 @@ CREATE INDEX IF NOT EXISTS idx_records_clean_quarter ON public.records_clean(qua
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO okr_admin;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO okr_admin;
 
--- Connect to okr_curated database and create tables
 \c okr_curated;
 
--- Enable pgvector extension for future embedding storage
-CREATE EXTENSION IF NOT EXISTS vector;
+-- CREATE EXTENSION IF NOT EXISTS vector;
 
--- Curated documents table (model-ready JSON with optional embeddings)
 CREATE TABLE IF NOT EXISTS public.documents (
     doc_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source TEXT NOT NULL, -- reference to source file/record
