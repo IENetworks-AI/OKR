@@ -98,7 +98,8 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO okr_admin;
 
 \c okr_curated;
 
--- CREATE EXTENSION IF NOT EXISTS vector;
+-- Enable vector extension for embeddings support
+CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE IF NOT EXISTS public.documents (
     doc_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -113,8 +114,9 @@ CREATE TABLE IF NOT EXISTS public.documents (
 CREATE INDEX IF NOT EXISTS idx_documents_source ON public.documents(source);
 CREATE INDEX IF NOT EXISTS idx_documents_created_at ON public.documents(created_at);
 CREATE INDEX IF NOT EXISTS idx_documents_meta_gin ON public.documents USING GIN(meta);
--- Prepared IVFFlat index for embeddings (commented out until embeddings are populated)
--- CREATE INDEX IF NOT EXISTS idx_documents_embedding_ivfflat ON public.documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- IVFFlat index for embeddings (will be created after embeddings are populated)
+-- Uncommented but will create index only when embeddings exist
+-- CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_documents_embedding_ivfflat ON public.documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100) WHERE embedding IS NOT NULL;
 
 -- Grant permissions on okr_curated
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO okr_admin;

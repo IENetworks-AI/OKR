@@ -4,42 +4,76 @@ import requests
 
 app = Flask(__name__)
 
-# Load config
-try:
-    # Try multiple possible paths for config
-    config_paths = [
-        'configs/pipeline_config.json',
-        'configs/db_config.yaml',
-        '../configs/pipeline_config.json',
-        '../configs/db_config.yaml',
-        '../../configs/pipeline_config.json',
-        '../../configs/db_config.yaml'
+def load_config():
+    """
+    Load configuration with improved path resolution and error handling.
+    Returns configuration dict or None if no config found.
+    """
+    # Define possible config file paths in order of preference
+    base_paths = [
+        '/app',  # Docker container path
+        '/opt/airflow',  # Airflow container path
+        os.getcwd(),  # Current working directory
+        os.path.dirname(os.path.abspath(__file__)),  # API directory
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'),  # Project root
     ]
     
-    cfg = None
-    for path in config_paths:
-        if os.path.exists(path):
-            if path.endswith('.json'):
-                with open(path, 'r') as f:
-                    cfg = json.load(f)
-            else:
-                with open(path, 'r') as f:
-                    cfg = yaml.safe_load(f)
-            break
+    config_files = [
+        'configs/pipeline_config.json',
+        'configs/db_config.yaml'
+    ]
     
-    if cfg:
-        if isinstance(cfg, dict) and 'data' in cfg:
-            MODEL_PATH = os.path.join(cfg['data']['models_directory'], 'model.pkl')
-        else:
-            MODEL_PATH = 'data/models/model.pkl'
-        model = joblib.load(MODEL_PATH) if os.path.exists(MODEL_PATH) else None
+    for base_path in base_paths:
+        for config_file in config_files:
+            config_path = os.path.join(base_path, config_file)
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, 'r') as f:
+                        if config_path.endswith('.json'):
+                            config = json.load(f)
+                        else:
+                            config = yaml.safe_load(f)
+                    print(f"✅ Loaded config from: {config_path}")
+                    return config
+                except Exception as e:
+                    print(f"❌ Error loading config from {config_path}: {e}")
+                    continue
+    
+    print("⚠️ No configuration file found, using defaults")
+    return None
+
+def get_model_path(config=None):
+    """
+    Get model path with improved resolution logic.
+    """
+    if config and isinstance(config, dict) and 'data' in config:
+        return os.path.join(config['data']['models_directory'], 'model.pkl')
+    
+    # Fallback paths
+    possible_paths = [
+        '/app/data/models/model.pkl',
+        'data/models/model.pkl',
+        '../data/models/model.pkl',
+        '../../data/models/model.pkl'
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    
+    return 'data/models/model.pkl'  # Default fallback
+
+# Load config and model
+try:
+    cfg = load_config()
+    MODEL_PATH = get_model_path(cfg)
+    model = joblib.load(MODEL_PATH) if os.path.exists(MODEL_PATH) else None
+    if model:
+        print(f"✅ Model loaded from: {MODEL_PATH}")
     else:
-        MODEL_PATH = 'data/models/model.pkl'
-        model = None
-        print("Warning: No config file found, using default paths")
-        
+        print(f"⚠️ No model found at: {MODEL_PATH}")
 except Exception as e:
-    print(f"Warning: Could not load config: {e}")
+    print(f"❌ Error during initialization: {e}")
     MODEL_PATH = 'data/models/model.pkl'
     model = None
 
@@ -214,16 +248,20 @@ def model_info():
 def get_okrs():
     """Get all OKR data"""
     try:
-        # Try multiple possible paths for data file
-        data_paths = [
-            'data/raw/sample_okr_data.json',
-            '../data/raw/sample_okr_data.json',
-            '../../data/raw/sample_okr_data.json'
+        # Define base paths and data file
+        base_paths = [
+            '/app',  # Docker container path
+            os.getcwd(),  # Current working directory
+            os.path.dirname(os.path.abspath(__file__)),  # API directory
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'),  # Project root
         ]
         
-        for data_file in data_paths:
-            if os.path.exists(data_file):
-                with open(data_file, 'r') as f:
+        data_file = 'data/raw/sample_okr_data.json'
+        
+        for base_path in base_paths:
+            full_path = os.path.join(base_path, data_file)
+            if os.path.exists(full_path):
+                with open(full_path, 'r') as f:
                     okr_data = json.load(f)
                 return jsonify(okr_data)
         
