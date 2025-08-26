@@ -30,6 +30,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deploy/postgres/init:/docker-entrypoint-initdb.d
+    ports:
       - "5433:5432"  # Different port to avoid conflict with airflow-db
     restart: always
     networks:
