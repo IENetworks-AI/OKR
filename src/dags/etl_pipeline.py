@@ -325,7 +325,7 @@ def emit_curated_json(**context):
         raise
 
 
-def publish_processed_event(**context):
+def publish_processed_event_task(**context):
     """
     Publish processed event to Kafka.
     """
@@ -401,7 +401,7 @@ curate_task = PythonOperator(
 
 publish_task = PythonOperator(
     task_id='publish_processed_event',
-    python_callable=publish_processed_event,
+    python_callable=publish_processed_event_task,
     dag=dag,
     doc_md="Publish processing completion event to Kafka"
 )
