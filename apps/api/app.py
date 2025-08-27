@@ -124,17 +124,14 @@ def health():
 
 @app.route("/")
 def root():
-    """Main dashboard page"""
-    if enhanced_dashboard:
-        return enhanced_dashboard.render_dashboard()
-    elif dashboard:
-        return dashboard.render_dashboard()
-    else:
-        return jsonify({
-            "message": "OKR API is running",
-            "status": "healthy",
-            "endpoints": ["/health", "/api/status", "/predict"]
-        })
+    """Main API landing page - redirects to unified dashboard"""
+    return jsonify({
+        "message": "OKR API is running",
+        "status": "healthy",
+        "dashboard_url": "http://localhost:3000",
+        "endpoints": ["/health", "/api/status", "/predict", "/model_info", "/pipeline/status"],
+        "note": "Visit the unified dashboard at http://localhost:3000 for full pipeline management"
+    })
 
 @app.route("/api/status")
 def api_status():
