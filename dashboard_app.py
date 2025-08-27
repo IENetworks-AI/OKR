@@ -18,8 +18,20 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from werkzeug.utils import secure_filename
 from flask import Flask, render_template, jsonify, request, redirect, url_for, send_file, flash
-from flask_socketio import SocketIO, emit
-import docker
+
+# Try to import SocketIO, but make it optional
+try:
+    from flask_socketio import SocketIO, emit
+    SOCKETIO_AVAILABLE = True
+except ImportError:
+    SOCKETIO_AVAILABLE = False
+    print("⚠️ flask-socketio not available, real-time features disabled")
+try:
+    import docker
+    DOCKER_AVAILABLE = True
+except ImportError:
+    DOCKER_AVAILABLE = False
+    print("⚠️ Docker Python client not available")
 
 # Add paths for imports
 project_root = Path(__file__).parent
@@ -30,7 +42,11 @@ app = Flask(__name__, template_folder='dashboard_templates', static_folder='dash
 app.config['SECRET_KEY'] = 'okr-unified-dashboard-2024'
 app.config['UPLOAD_FOLDER'] = str(project_root / 'data' / 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
-socketio = SocketIO(app, cors_allowed_origins="*")
+
+if SOCKETIO_AVAILABLE:
+    socketio = SocketIO(app, cors_allowed_origins="*")
+else:
+    socketio = None
 
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -104,6 +120,9 @@ def get_system_metrics():
 
 def get_docker_status():
     """Get Docker containers status"""
+    if not DOCKER_AVAILABLE:
+        return [{'error': 'Docker Python client not available'}]
+    
     try:
         client = docker.from_env()
         containers = []
@@ -191,13 +210,14 @@ def background_monitoring():
             # Update data stats
             dashboard_state['data_stats'] = get_data_directory_stats()
             
-            # Emit updates to connected clients
-            socketio.emit('dashboard_update', {
-                'timestamp': datetime.now().isoformat(),
-                'services': dashboard_state['services'],
-                'system': dashboard_state['system'],
-                'data_stats': dashboard_state['data_stats']
-            })
+            # Emit updates to connected clients (if SocketIO available)
+            if SOCKETIO_AVAILABLE and socketio:
+                socketio.emit('dashboard_update', {
+                    'timestamp': datetime.now().isoformat(),
+                    'services': dashboard_state['services'],
+                    'system': dashboard_state['system'],
+                    'data_stats': dashboard_state['data_stats']
+                })
             
             time.sleep(15)  # Update every 15 seconds
             
@@ -364,31 +384,32 @@ def health_check():
         'connected_clients': dashboard_state['connected_clients']
     })
 
-# WebSocket events
-@socketio.on('connect')
-def handle_connect():
-    dashboard_state['connected_clients'] += 1
-    emit('dashboard_update', {
-        'timestamp': datetime.now().isoformat(),
-        'services': dashboard_state['services'],
-        'system': dashboard_state['system'],
-        'data_stats': dashboard_state['data_stats']
-    })
-    print(f"Client connected. Total clients: {dashboard_state['connected_clients']}")
+# WebSocket events (only if SocketIO is available)
+if SOCKETIO_AVAILABLE and socketio:
+    @socketio.on('connect')
+    def handle_connect():
+        dashboard_state['connected_clients'] += 1
+        emit('dashboard_update', {
+            'timestamp': datetime.now().isoformat(),
+            'services': dashboard_state['services'],
+            'system': dashboard_state['system'],
+            'data_stats': dashboard_state['data_stats']
+        })
+        print(f"Client connected. Total clients: {dashboard_state['connected_clients']}")
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    dashboard_state['connected_clients'] = max(0, dashboard_state['connected_clients'] - 1)
-    print(f"Client disconnected. Total clients: {dashboard_state['connected_clients']}")
+    @socketio.on('disconnect')
+    def handle_disconnect():
+        dashboard_state['connected_clients'] = max(0, dashboard_state['connected_clients'] - 1)
+        print(f"Client disconnected. Total clients: {dashboard_state['connected_clients']}")
 
-@socketio.on('request_update')
-def handle_update_request():
-    emit('dashboard_update', {
-        'timestamp': datetime.now().isoformat(),
-        'services': dashboard_state['services'],
-        'system': dashboard_state['system'],
-        'data_stats': dashboard_state['data_stats']
-    })
+    @socketio.on('request_update')
+    def handle_update_request():
+        emit('dashboard_update', {
+            'timestamp': datetime.now().isoformat(),
+            'services': dashboard_state['services'],
+            'system': dashboard_state['system'],
+            'data_stats': dashboard_state['data_stats']
+        })
 
 if __name__ == '__main__':
     # Create template and static directories if they don't exist
@@ -405,4 +426,8 @@ if __name__ == '__main__':
     print("🔍 Health check at: http://localhost:3000/health")
     
     # Run the application
-    socketio.run(app, host='0.0.0.0', port=3000, debug=False)
+    if SOCKETIO_AVAILABLE and socketio:
+        socketio.run(app, host='0.0.0.0', port=3000, debug=False)
+    else:
+        print("⚠️ Running without real-time features")
+        app.run(host='0.0.0.0', port=3000, debug=False)

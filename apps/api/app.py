@@ -1,10 +1,23 @@
 from flask import Flask, request, jsonify, render_template_string, redirect, url_for, send_file
-import os, yaml, joblib, datetime, json, base64
+import os, datetime, json, base64
 import requests
 import sys
 import threading
 import tempfile
 from pathlib import Path
+
+# Optional imports with error handling
+try:
+    import yaml
+except ImportError:
+    yaml = None
+    print("⚠️ PyYAML not available")
+
+try:
+    import joblib
+except ImportError:
+    joblib = None
+    print("⚠️ joblib not available, ML model loading disabled")
 
 # Configure Python path for imports
 app_root = Path(__file__).parent.parent.parent
