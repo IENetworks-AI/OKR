@@ -216,41 +216,7 @@ services:
       retries: 10
       start_period: 120s
 
-  # Flask API
-  api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-    container_name: okr_api
-    working_dir: /app
-    ports:
-      - "5001:5001"
-    volumes:
-      - ./:/app
-      - ./data:/app/data
-    depends_on:
-      kafka:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-      airflow-db:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - okr_net
-    environment:
-      - PYTHONPATH=/app:/app/src
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - AIRFLOW_BASE_URL=http://airflow-webserver:8080
-      - AIRFLOW_USER=admin
-      - AIRFLOW_PASSWORD=admin
-    command: ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "2", "--worker-class", "sync", "--timeout", "120", "--keep-alive", "5", "--max-requests", "1000", "--max-requests-jitter", "100", "apps.api.app:app"]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5001/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+  # (Removed duplicate Flask API service 'api' to avoid conflict with 'okr-api')
 
   # Nginx reverse proxy
   nginx:
@@ -261,7 +227,7 @@ services:
     volumes:
       - ./deploy/nginx/mlapi.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      api:
+      okr-api:
         condition: service_healthy
     restart: unless-stopped
     networks:

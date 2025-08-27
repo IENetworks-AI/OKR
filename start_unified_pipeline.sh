@@ -104,12 +104,12 @@ start_services() {
     
     # Start Airflow services
     print_status "Starting Airflow services..."
-    $DOCKER_COMPOSE_CMD up -d airflow-init
+    # Airflow init service is not defined in compose; start webserver and scheduler directly
     $DOCKER_COMPOSE_CMD up -d airflow-webserver airflow-scheduler
     
     # Start Kafka
     print_status "Starting Kafka services..."
-    $DOCKER_COMPOSE_CMD up -d zookeeper kafka
+    $DOCKER_COMPOSE_CMD up -d kafka
     
     # Start MLflow
     print_status "Starting MLflow server..."

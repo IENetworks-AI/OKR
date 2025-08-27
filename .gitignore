@@ -27,6 +27,10 @@ dist-ssr
 data/raw/*
 data/processed/*
 data/final/*
+data/models/*
+data/results/*
+data/uploads/*
+data/downloads/*
 !data/*/.gitkeep
 !data/README.md
 

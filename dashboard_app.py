@@ -309,7 +309,7 @@ def service_action(service_name, action):
             'airflow': 'airflow-webserver',
             'postgres': 'postgres',
             'api': 'okr-api',
-            'mlflow': 'mlflow-server'
+            'mlflow': 'mlflow'
         }
         
         docker_service = service_map.get(service_name)
