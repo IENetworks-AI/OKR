@@ -1,0 +1,38 @@
+
+# 🚀 Enhanced ML Workflow - Quick Start
+
+## 1. Install Dependencies (if not already installed)
+```bash
+pip install -r requirements.txt
+```
+
+## 2. Start the Complete Workflow
+```bash
+python3 start_enhanced_workflow.py
+```
+
+## 3. Access the System
+- Main Dashboard: http://localhost:5001/
+- MLflow UI: http://localhost:5000/
+- API Documentation: See ENHANCED_WORKFLOW_README.md
+
+## 4. Test the System (Optional)
+```bash
+python3 test_workflow.py
+```
+
+## 5. Troubleshooting
+- Check ENHANCED_WORKFLOW_README.md for detailed instructions
+- Ensure Python 3.8+ is installed
+- Ensure ports 5000 and 5001 are available
+- Check that all dependencies are installed
+
+## Features Ready:
+✅ MLflow tracking server (no Docker needed)
+✅ Real data upload/download functionality  
+✅ End-to-end ML workflow
+✅ Comprehensive web dashboard
+✅ Model training and prediction
+✅ Data management and processing
+
+Happy Machine Learning! 🎉
