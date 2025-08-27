@@ -51,6 +51,7 @@ jobs:
   # Security Scan
   security-scan:
     runs-on: ubuntu-latest
+    needs: [code-quality]
     steps:
       - uses: actions/checkout@v4
       
@@ -68,6 +69,7 @@ jobs:
   # Docker Build Test
   docker-test:
     runs-on: ubuntu-latest
+    needs: [security-scan]
     steps:
       - uses: actions/checkout@v4
       
@@ -76,7 +78,7 @@ jobs:
       
       - name: Build Docker images
         run: |
-          docker build -t okr-api:test -f api/Dockerfile .
+          docker build -t okr-api:test -f apps/api/Dockerfile .
           docker build -t okr-producer:test -f kafka_pipeline/producers/Dockerfile .
           docker build -t okr-consumer:test -f kafka_pipeline/consumers/Dockerfile .
       
@@ -87,6 +89,7 @@ jobs:
   # ETL Pipeline Validation
   etl-validation:
     runs-on: ubuntu-latest
+    needs: [docker-test]
     steps:
       - uses: actions/checkout@v4
       
@@ -107,9 +110,8 @@ jobs:
           python -c "
           import os
           import sys
-          sys.path.append('airflow_dags')
           from airflow.models import DagBag
-          dagbag = DagBag('airflow_dags/dags')
+          dagbag = DagBag('src/dags')
           if dagbag.import_errors:
               print('DAG import errors:')
               for filename, errors in dagbag.import_errors.items():

@@ -24,7 +24,7 @@ jobs:
           flake8 || true
       - name: Build Docker images (compat paths)
         run: |
-          docker build -t okr-api:test -f api/Dockerfile .
+          docker build -t okr-api:test -f apps/api/Dockerfile .
           docker build -t okr-producer:test -f kafka_pipeline/producers/Dockerfile .
           docker build -t okr-consumer:test -f kafka_pipeline/consumers/Dockerfile .
       - name: Validate ETL pipeline components
@@ -35,5 +35,5 @@ jobs:
         run: |
           echo "Running unit tests..."
           python -m pip install pytest pytest-cov
-          pytest -q
+          pytest --maxfail=1 --disable-warnings -q --cov=. --cov-report=xml
 
