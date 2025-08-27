@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template_string, redirect, url_for, send_file
+from flask import Flask, request, jsonify, render_template_string, redirect, url_for, send_file, Response
 import os, yaml, joblib, datetime, json, base64
 import requests
 import sys
@@ -124,17 +124,29 @@ def health():
 
 @app.route("/")
 def root():
-    """Main dashboard page"""
-    if enhanced_dashboard:
-        return enhanced_dashboard.render_dashboard()
-    elif dashboard:
-        return dashboard.render_dashboard()
-    else:
+    """Main route – serve dashboard by default"""
+    return redirect(url_for('serve_dashboard'))
+
+@app.route("/dashboard")
+def serve_dashboard():
+    """Serve the unified dashboard UI"""
+    try:
+        dashboard_html_path = Path(__file__).parent / 'dashboard.html'
+        if dashboard_html_path.exists():
+            content = dashboard_html_path.read_text(encoding='utf-8')
+            return Response(content, mimetype='text/html')
+        # Fallback to enhanced/modern dashboards if available
+        if enhanced_dashboard:
+            return enhanced_dashboard.render_dashboard()
+        if dashboard:
+            return dashboard.render_dashboard()
         return jsonify({
             "message": "OKR API is running",
             "status": "healthy",
             "endpoints": ["/health", "/api/status", "/predict"]
         })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/status")
 def api_status():
@@ -178,6 +190,78 @@ def model_info():
             os.path.getmtime(MODEL_PATH)
         ).isoformat() if os.path.exists(MODEL_PATH) else None
     })
+
+# -----------------------
+# File management helpers
+# -----------------------
+DATA_BASE_DIR = Path('data')
+
+def _safe_path(*parts: str) -> Path:
+    """Resolve a safe path under the data directory."""
+    base = DATA_BASE_DIR.resolve()
+    target = (base / Path(*parts)).resolve()
+    if not str(target).startswith(str(base)):
+        raise ValueError("Invalid path")
+    return target
+
+@app.route('/files', methods=['GET'])
+def list_files():
+    """List files in data directories.
+    Optional query param: dir (raw|processed|final|models|results|archive)
+    """
+    try:
+        subdir = request.args.get('dir')
+        directories = ['raw', 'processed', 'final', 'models', 'results', 'archive']
+        result = {}
+        if subdir:
+            directories = [subdir]
+        for d in directories:
+            dir_path = _safe_path(d)
+            dir_path.mkdir(parents=True, exist_ok=True)
+            files = []
+            for f in dir_path.iterdir():
+                if f.is_file():
+                    files.append({
+                        'name': f.name,
+                        'size_bytes': f.stat().st_size,
+                        'modified': datetime.datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
+                        'path': str(f.relative_to(DATA_BASE_DIR))
+                    })
+            result[d] = files
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    """Upload a file into a target data subdirectory.
+    Form fields: file (binary), dir (raw|processed|final|models|results|archive)
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "No file part"}), 400
+        upload = request.files['file']
+        target_dir = request.form.get('dir', 'raw')
+        if not upload.filename:
+            return jsonify({"error": "No selected file"}), 400
+        save_dir = _safe_path(target_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
+        save_path = save_dir / upload.filename
+        upload.save(str(save_path))
+        return jsonify({"message": "File uploaded", "path": str(save_path.relative_to(DATA_BASE_DIR))})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/download/<path:relpath>', methods=['GET'])
+def download_file(relpath: str):
+    """Download a file by relative path under the data directory."""
+    try:
+        file_path = _safe_path(relpath)
+        if not file_path.exists() or not file_path.is_file():
+            return jsonify({"error": "File not found"}), 404
+        return send_file(str(file_path), as_attachment=True, download_name=file_path.name)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Airflow integration endpoints with error handling
 AIRFLOW_BASE_URL = os.getenv('AIRFLOW_BASE_URL', 'http://airflow-webserver:8080')
