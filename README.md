@@ -1,6 +1,6 @@
-# OKR ML Pipeline with Kafka, Airflow, and MLflow
+# OKR ML Pipeline - Unified Dashboard
 
-A production-ready machine learning pipeline that processes OKR (Objectives and Key Results) data through a complete ETL workflow, with real-time streaming via Kafka, workflow orchestration using Airflow, and ML experiment tracking with MLflow.
+A production-ready machine learning pipeline that processes OKR (Objectives and Key Results) data through a complete ETL workflow, with real-time streaming via Kafka, workflow orchestration using Airflow, and ML experiment tracking with MLflow. Now features a modern unified dashboard for complete pipeline management.
 
 ## 🏢 Project Overview
 
@@ -11,6 +11,8 @@ This comprehensive ML pipeline system enables organizations to:
 - **Workflow Orchestration**: Airflow DAGs manage complex data processing workflows
 - **ML Model Training**: Automated model training and evaluation with performance tracking
 - **Experiment Tracking**: MLflow integration for model versioning and experiment management
+- **Unified Dashboard**: Modern web interface with real-time monitoring, file management, and service control
+- **File Management**: Built-in upload/download functionality for all data types
 - **Production Deployment**: Docker-based deployment ready for Oracle Cloud Infrastructure
 
 ## 🏗️ Architecture
@@ -39,14 +41,29 @@ This comprehensive ML pipeline system enables organizations to:
 
 ## 🚀 Quick Start
 
-See `LOCAL_SETUP.md` for local development setup.
-See `ORACLE_DEPLOYMENT.md` for production deployment on Oracle Cloud.
+### One-Command Setup
+```bash
+# Start the complete pipeline with unified dashboard
+./start_unified_pipeline.sh
+```
 
 ### Access Points:
-- **Main Application**: http://YOUR_SERVER_IP (Production) or http://localhost (Local)
-- **Airflow UI**: http://YOUR_SERVER_IP:8081 (admin/admin)
-- **MLflow UI**: http://YOUR_SERVER_IP:5000
-- **Kafka UI**: http://YOUR_SERVER_IP:8085
+- **🌟 Unified Dashboard**: http://localhost:3000 (Main entry point)
+- **🔧 OKR API**: http://localhost:5001
+- **📈 MLflow UI**: http://localhost:5000
+- **🌊 Airflow UI**: http://localhost:8081 (admin/admin)
+- **📁 Kafka UI**: http://localhost:8085
+
+### Dashboard Features:
+- **Real-time Monitoring**: Live system metrics and service status
+- **File Management**: Upload/download files with drag-and-drop interface
+- **Service Control**: Start/stop/restart services directly from the UI
+- **Pipeline Logs**: View real-time pipeline execution logs
+- **System Analytics**: Charts and graphs for performance monitoring
+
+For detailed setup instructions:
+- See `LOCAL_SETUP.md` for local development setup
+- See `ORACLE_DEPLOYMENT.md` for production deployment on Oracle Cloud
 
 ## 📁 Project Structure
 

@@ -352,6 +352,99 @@ services:
       retries: 15
       start_period: 180s
 
+  # Unified Dashboard - Main Entry Point
+  dashboard:
+    image: python:3.11-slim
+    container_name: okr_unified_dashboard
+    ports:
+      - "3000:3000"  # Main dashboard port
+    volumes:
+      - ./:/app
+      - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - PYTHONPATH=/app:/app/src:/app/apps
+      - FLASK_ENV=production
+      - FLASK_DEBUG=0
+    command: >
+      bash -c "apt-get update && apt-get install -y gcc g++ curl docker.io && 
+               pip install --no-cache-dir -r dashboard_requirements.txt &&
+               python dashboard_app.py"
+    restart: unless-stopped
+    networks:
+      - okr_net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # OKR API Service
+  okr-api:
+    image: python:3.11-slim
+    container_name: okr_api
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./:/app
+      - ./data:/app/data
+    working_dir: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+    environment:
+      - PYTHONPATH=/app:/app/src:/app/apps
+      - FLASK_ENV=production
+      - AIRFLOW_BASE_URL=http://airflow-webserver:8080
+      - AIRFLOW_USER=admin
+      - AIRFLOW_PASSWORD=admin
+    command: >
+      bash -c "apt-get update && apt-get install -y gcc g++ curl && 
+               pip install --no-cache-dir flask requests joblib scikit-learn pandas numpy psycopg2-binary &&
+               python apps/api/app.py --host 0.0.0.0 --port 5001"
+    restart: unless-stopped
+    networks:
+      - okr_net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
 volumes:
   airflow_db_data:
   postgres_data:
