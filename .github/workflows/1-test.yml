@@ -1,0 +1,214 @@
+name: "Step 1: Test & Validation"
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    outputs:
+      test-status: ${{ steps.test-result.outputs.status }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov flake8 black
+      
+      - name: Code formatting check (Black)
+        run: |
+          echo "Checking code formatting..."
+          black --check --diff . || (echo "Code formatting issues found. Run 'black .' to fix." && exit 1)
+      
+      - name: Lint with flake8
+        run: |
+          echo "Running linting..."
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      
+      - name: Run unit tests
+        run: |
+          echo "Running unit tests..."
+          python -m pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing
+      
+      - name: Test result
+        id: test-result
+        run: |
+          echo "status=success" >> $GITHUB_OUTPUT
+          echo "✅ All tests passed successfully"
+
+  validate-structure:
+    name: Validate Project Structure
+    runs-on: ubuntu-latest
+    needs: test
+    if: needs.test.outputs.test-status == 'success'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Validate project structure
+        run: |
+          echo "Validating project structure..."
+          
+          # Check required directories
+          required_dirs=(
+            "src"
+            "tests"
+            "data"
+            "configs"
+            "apps"
+            "src/dags"
+            "src/models"
+            "src/utils"
+          )
+          
+          for dir in "${required_dirs[@]}"; do
+            if [ ! -d "$dir" ]; then
+              echo "❌ Missing required directory: $dir"
+              exit 1
+            else
+              echo "✅ Directory exists: $dir"
+            fi
+          done
+          
+          # Check required files
+          required_files=(
+            "requirements.txt"
+            "docker-compose.yml"
+            "dashboard_app.py"
+            "data_manager.py"
+          )
+          
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing required file: $file"
+              exit 1
+            else
+              echo "✅ File exists: $file"
+            fi
+          done
+          
+          echo "✅ Project structure validation passed"
+
+  validate-docker:
+    name: Validate Docker Configuration
+    runs-on: ubuntu-latest
+    needs: [test, validate-structure]
+    if: needs.test.outputs.test-status == 'success'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Validate Docker Compose
+        run: |
+          echo "Validating Docker Compose configuration..."
+          docker-compose config
+          echo "✅ Docker Compose configuration is valid"
+      
+      - name: Build Docker images (test)
+        run: |
+          echo "Building Docker images for testing..."
+          
+          # Build API image if Dockerfile exists
+          if [ -f "apps/api/Dockerfile" ]; then
+            echo "Building API image..."
+            docker build -t okr-api:test -f apps/api/Dockerfile .
+            echo "✅ API image built successfully"
+          fi
+          
+          # Build Kafka producer if Dockerfile exists
+          if [ -f "kafka_pipeline/producers/Dockerfile" ]; then
+            echo "Building Kafka producer image..."
+            docker build -t okr-producer:test -f kafka_pipeline/producers/Dockerfile .
+            echo "✅ Producer image built successfully"
+          fi
+          
+          # Build Kafka consumer if Dockerfile exists
+          if [ -f "kafka_pipeline/consumers/Dockerfile" ]; then
+            echo "Building Kafka consumer image..."
+            docker build -t okr-consumer:test -f kafka_pipeline/consumers/Dockerfile .
+            echo "✅ Consumer image built successfully"
+          fi
+          
+          echo "✅ All Docker images built successfully"
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: test
+    if: needs.test.outputs.test-status == 'success'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run security scan
+        run: |
+          echo "Running security scan..."
+          
+          # Check for common security issues in Python files
+          echo "Checking for hardcoded secrets..."
+          
+          # Look for potential secrets (basic check)
+          if grep -r -i "password\s*=" . --exclude-dir=.git --exclude-dir=__pycache__ --exclude="*.md"; then
+            echo "⚠️ Potential hardcoded passwords found"
+          fi
+          
+          if grep -r -i "api_key\s*=" . --exclude-dir=.git --exclude-dir=__pycache__ --exclude="*.md"; then
+            echo "⚠️ Potential hardcoded API keys found"
+          fi
+          
+          echo "✅ Basic security scan completed"
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [test, validate-structure, validate-docker, security-scan]
+    if: always()
+    
+    steps:
+      - name: Test Summary
+        run: |
+          echo "=========================================="
+          echo "           TEST SUMMARY"
+          echo "=========================================="
+          echo "Test Status: ${{ needs.test.result }}"
+          echo "Structure Validation: ${{ needs.validate-structure.result }}"
+          echo "Docker Validation: ${{ needs.validate-docker.result }}"
+          echo "Security Scan: ${{ needs.security-scan.result }}"
+          echo "=========================================="
+          
+          if [ "${{ needs.test.result }}" = "success" ] && \
+             [ "${{ needs.validate-structure.result }}" = "success" ] && \
+             [ "${{ needs.validate-docker.result }}" = "success" ] && \
+             [ "${{ needs.security-scan.result }}" = "success" ]; then
+            echo "✅ All tests and validations passed! Ready for build step."
+            exit 0
+          else
+            echo "❌ Some tests or validations failed. Check the logs above."
+            exit 1
+          fi

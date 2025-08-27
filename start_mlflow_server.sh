@@ -73,8 +73,8 @@ install_dependencies() {
     pip install --upgrade pip
     
     # Install MLflow and dependencies
-    pip install mlflow>=2.8.1
-    pip install scikit-learn pandas numpy requests
+    pip install --break-system-packages mlflow>=2.8.1
+    pip install --break-system-packages scikit-learn pandas numpy requests
     
     echo -e "${GREEN}✅ Dependencies installed${NC}"
 }

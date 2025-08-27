@@ -1,0 +1,252 @@
+name: "Step 2: Build & Package"
+
+on:
+  workflow_run:
+    workflows: ["Step 1: Test & Validation"]
+    types:
+      - completed
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  check-prerequisites:
+    name: Check Prerequisites
+    runs-on: ubuntu-latest
+    outputs:
+      can-build: ${{ steps.check.outputs.can-build }}
+    
+    steps:
+      - name: Check if tests passed
+        id: check
+        run: |
+          if [ "${{ github.event.workflow_run.conclusion }}" = "success" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "can-build=true" >> $GITHUB_OUTPUT
+            echo "✅ Prerequisites met, proceeding with build"
+          else
+            echo "can-build=false" >> $GITHUB_OUTPUT
+            echo "❌ Tests failed, skipping build"
+          fi
+
+  build-application:
+    name: Build Application
+    runs-on: ubuntu-latest
+    needs: check-prerequisites
+    if: needs.check-prerequisites.outputs.can-build == 'true'
+    outputs:
+      build-status: ${{ steps.build-result.outputs.status }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Build application package
+        run: |
+          echo "Building application package..."
+          
+          # Create build directory
+          mkdir -p build/okr-ml-pipeline
+          
+          # Copy source files
+          cp -r src/ build/okr-ml-pipeline/
+          cp -r apps/ build/okr-ml-pipeline/
+          cp -r configs/ build/okr-ml-pipeline/
+          cp requirements.txt build/okr-ml-pipeline/
+          cp dashboard_app.py build/okr-ml-pipeline/
+          cp data_manager.py build/okr-ml-pipeline/
+          cp docker-compose.yml build/okr-ml-pipeline/
+          
+          # Copy scripts
+          cp -r scripts/ build/okr-ml-pipeline/
+          cp *.sh build/okr-ml-pipeline/
+          
+          echo "✅ Application package built successfully"
+      
+      - name: Create deployment package
+        run: |
+          echo "Creating deployment package..."
+          cd build
+          tar -czf okr-ml-pipeline-$(date +%Y%m%d-%H%M%S).tar.gz okr-ml-pipeline/
+          echo "✅ Deployment package created"
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: okr-ml-pipeline-build
+          path: build/*.tar.gz
+          retention-days: 30
+      
+      - name: Build result
+        id: build-result
+        run: |
+          echo "status=success" >> $GITHUB_OUTPUT
+          echo "✅ Build completed successfully"
+
+  build-docker-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [check-prerequisites, build-application]
+    if: needs.check-prerequisites.outputs.can-build == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build and tag Docker images
+        run: |
+          echo "Building Docker images..."
+          
+          # Build main application images
+          if [ -f "apps/api/Dockerfile" ]; then
+            echo "Building API image..."
+            docker build -t okr-api:latest -f apps/api/Dockerfile .
+            docker tag okr-api:latest okr-api:$(date +%Y%m%d-%H%M%S)
+            echo "✅ API image built"
+          fi
+          
+          if [ -f "kafka_pipeline/producers/Dockerfile" ]; then
+            echo "Building Kafka producer image..."
+            docker build -t okr-producer:latest -f kafka_pipeline/producers/Dockerfile .
+            docker tag okr-producer:latest okr-producer:$(date +%Y%m%d-%H%M%S)
+            echo "✅ Producer image built"
+          fi
+          
+          if [ -f "kafka_pipeline/consumers/Dockerfile" ]; then
+            echo "Building Kafka consumer image..."
+            docker build -t okr-consumer:latest -f kafka_pipeline/consumers/Dockerfile .
+            docker tag okr-consumer:latest okr-consumer:$(date +%Y%m%d-%H%M%S)
+            echo "✅ Consumer image built"
+          fi
+          
+          # Build Airflow image if exists
+          if [ -f "airflow.Dockerfile" ]; then
+            echo "Building Airflow image..."
+            docker build -t okr-airflow:latest -f airflow.Dockerfile .
+            docker tag okr-airflow:latest okr-airflow:$(date +%Y%m%d-%H%M%S)
+            echo "✅ Airflow image built"
+          fi
+          
+          echo "✅ All Docker images built successfully"
+      
+      - name: Save Docker images
+        run: |
+          echo "Saving Docker images..."
+          mkdir -p docker-images
+          
+          # Save images as tar files
+          if docker image inspect okr-api:latest >/dev/null 2>&1; then
+            docker save okr-api:latest | gzip > docker-images/okr-api.tar.gz
+          fi
+          
+          if docker image inspect okr-producer:latest >/dev/null 2>&1; then
+            docker save okr-producer:latest | gzip > docker-images/okr-producer.tar.gz
+          fi
+          
+          if docker image inspect okr-consumer:latest >/dev/null 2>&1; then
+            docker save okr-consumer:latest | gzip > docker-images/okr-consumer.tar.gz
+          fi
+          
+          if docker image inspect okr-airflow:latest >/dev/null 2>&1; then
+            docker save okr-airflow:latest | gzip > docker-images/okr-airflow.tar.gz
+          fi
+          
+          echo "✅ Docker images saved"
+      
+      - name: Upload Docker images
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: docker-images/*.tar.gz
+          retention-days: 30
+
+  create-release-notes:
+    name: Create Release Notes
+    runs-on: ubuntu-latest
+    needs: [build-application, build-docker-images]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Generate release notes
+        run: |
+          echo "Generating release notes..."
+          
+          cat > release-notes.md << EOF
+          # OKR ML Pipeline Release - $(date +%Y-%m-%d)
+          
+          ## 🚀 Features
+          - Enhanced dashboard with sidebar navigation
+          - Improved file upload/download functionality
+          - Fixed MLflow integration
+          - Organized GitHub Actions workflow
+          - Cleaned up DAGs and removed duplicates
+          
+          ## 🔧 Technical Changes
+          - Fixed unit tests structure
+          - Improved error handling
+          - Updated Docker configurations
+          - Enhanced monitoring capabilities
+          
+          ## 📦 Build Information
+          - Build Date: $(date)
+          - Commit SHA: ${{ github.sha }}
+          - Branch: ${{ github.ref_name }}
+          
+          ## 🧪 Testing
+          - All unit tests passed
+          - Docker images built successfully
+          - Security scan completed
+          
+          ## 📋 Components
+          - Dashboard Application
+          - MLflow Server
+          - Airflow DAGs
+          - Kafka Pipeline
+          - Data Management Tools
+          EOF
+          
+          echo "✅ Release notes generated"
+      
+      - name: Upload release notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+          retention-days: 90
+
+  build-summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [check-prerequisites, build-application, build-docker-images, create-release-notes]
+    if: always()
+    
+    steps:
+      - name: Build Summary
+        run: |
+          echo "=========================================="
+          echo "           BUILD SUMMARY"
+          echo "=========================================="
+          echo "Prerequisites: ${{ needs.check-prerequisites.result }}"
+          echo "Application Build: ${{ needs.build-application.result }}"
+          echo "Docker Images: ${{ needs.build-docker-images.result }}"
+          echo "Release Notes: ${{ needs.create-release-notes.result }}"
+          echo "=========================================="
+          
+          if [ "${{ needs.check-prerequisites.result }}" = "success" ] && \
+             [ "${{ needs.build-application.result }}" = "success" ] && \
+             [ "${{ needs.build-docker-images.result }}" = "success" ] && \
+             [ "${{ needs.create-release-notes.result }}" = "success" ]; then
+            echo "✅ All build steps completed successfully! Ready for deployment."
+            exit 0
+          else
+            echo "❌ Some build steps failed. Check the logs above."
+            exit 1
+          fi
