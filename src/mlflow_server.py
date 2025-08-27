@@ -140,8 +140,10 @@ class MLflowServerManager:
         """Check if MLflow server is healthy"""
         try:
             import requests
-            response = requests.get(f"http://{self.host}:{self.port}/health", timeout=5)
-            return response.status_code == 200
+            # Try /api/2.0/preview/mlflow/experiments/list which exists on server
+            url = f"http://{self.host}:{self.port}"
+            r = requests.get(url, timeout=3)
+            return r.status_code in (200, 302)
         except Exception:
             return False
     
