@@ -9,7 +9,7 @@ services:
       POSTGRES_DB: airflow
     volumes:
       - airflow_db_data:/var/lib/postgresql/data
-    restart: always
+    restart: unless-stopped
     networks:
       - okr_net
     healthcheck:
@@ -32,7 +32,7 @@ services:
       - ./deploy/postgres/init:/docker-entrypoint-initdb.d
     ports:
       - "5433:5432"
-    restart: always
+    restart: unless-stopped
     networks:
       - okr_net
     healthcheck:
@@ -46,7 +46,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: okr_redis
-    restart: always
+    restart: unless-stopped
     networks:
       - okr_net
     healthcheck:
@@ -79,7 +79,7 @@ services:
       - "9092:9092"
     volumes:
       - kafka_data:/bitnami/kafka
-    restart: always
+    restart: unless-stopped
     depends_on:
       airflow-db:
         condition: service_healthy
@@ -109,7 +109,7 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-    restart: always
+    restart: unless-stopped
     networks:
       - okr_net
 
@@ -161,7 +161,7 @@ services:
       - ./airflow-init.sh:/airflow-init.sh
     ports:
       - "8081:8080"
-    restart: always
+    restart: unless-stopped
     networks:
       - okr_net
     command: ["airflow", "webserver"]
@@ -205,7 +205,7 @@ services:
       - ./data:/opt/airflow/data
       - ./configs:/opt/airflow/configs
       - ./logs:/opt/airflow/logs
-    restart: always
+    restart: unless-stopped
     networks:
       - okr_net
     command: ["airflow", "scheduler"]
@@ -235,7 +235,7 @@ services:
         condition: service_healthy
       airflow-db:
         condition: service_healthy
-    restart: always
+    restart: unless-stopped
     networks:
       - okr_net
     environment:
@@ -263,9 +263,12 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    restart: always
+    restart: unless-stopped
     networks:
       - okr_net
+    environment:
+      - NGINX_WORKER_PROCESSES=auto
+      - NGINX_WORKER_CONNECTIONS=1024
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -287,7 +290,7 @@ services:
       - "5500:5500"
     volumes:
       - oracle_data:/opt/oracle/oradata
-    restart: always
+    restart: unless-stopped
     networks:
       - okr_net
     healthcheck:
@@ -326,9 +329,22 @@ services:
                --backend-store-uri postgresql://airflow:airflow@airflow-db:5432/airflow 
                --default-artifact-root /mlflow 
                --serve-artifacts"
-    restart: always
+    restart: unless-stopped
     networks:
       - okr_net
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:5000/api/2.0/mlflow/experiments/list || exit 1"]
       interval: 30s
