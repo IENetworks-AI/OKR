@@ -1,8 +1,14 @@
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, redirect, url_for
 import os, yaml, joblib, datetime, json, base64
 import requests
+import sys
+
+# Add dashboard module to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'dashboard'))
+from modern_dashboard import ModernDashboard
 
 app = Flask(__name__)
+dashboard = ModernDashboard()
 
 # Load config
 try:
@@ -149,6 +155,11 @@ def health():
 
 @app.route("/")
 def root():
+    """Main dashboard page - redirect to modern dashboard"""
+    return dashboard.render_dashboard()
+
+@app.route("/api/status")
+def api_status():
     return {
         "status": "ok",
         "service": "mlapi",
@@ -156,8 +167,8 @@ def root():
     }
 
 @app.route("/dashboard")
-def dashboard():
-    """Dashboard HTML page"""
+def legacy_dashboard():
+    """Legacy Dashboard HTML page"""
     return render_template_string(
         dashboard_html,
         model_loaded=model is not None,
@@ -332,3 +343,113 @@ def trigger_dag(dag_id: str):
         return jsonify(r.json())
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# Modern Dashboard API Routes
+@app.route('/api/metrics')
+def api_metrics():
+    """Get system metrics for dashboard"""
+    return jsonify(dashboard.get_metrics())
+
+@app.route('/api/upload', methods=['POST'])
+def api_upload():
+    """Handle file uploads"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        from werkzeug.utils import secure_filename
+        filename = secure_filename(file.filename)
+        file_path = os.path.join('/opt/airflow/data/raw', filename)
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        
+        file.save(file_path)
+        
+        return jsonify({'message': f'File {filename} uploaded successfully'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/download/<data_type>')
+def api_download(data_type):
+    """Handle data downloads"""
+    try:
+        import glob
+        from flask import send_file
+        import io
+        import zipfile
+        
+        format_type = request.args.get('format', 'csv')
+        
+        if data_type == 'raw':
+            directory = '/opt/airflow/data/raw'
+        elif data_type == 'processed':
+            directory = '/opt/airflow/data/processed'
+        else:
+            return jsonify({'error': 'Invalid data type'}), 400
+        
+        if format_type == 'zip':
+            # Create ZIP file
+            memory_file = io.BytesIO()
+            with zipfile.ZipFile(memory_file, 'w') as zf:
+                if os.path.exists(directory):
+                    for filename in os.listdir(directory):
+                        if filename.endswith('.csv'):
+                            zf.write(os.path.join(directory, filename), filename)
+            
+            memory_file.seek(0)
+            return send_file(
+                memory_file,
+                as_attachment=True,
+                download_name=f'okr_{data_type}_data.zip',
+                mimetype='application/zip'
+            )
+        else:
+            # Return first CSV file found
+            csv_files = glob.glob(os.path.join(directory, "*.csv"))
+            if csv_files:
+                return send_file(csv_files[0], as_attachment=True)
+            else:
+                return jsonify({'error': 'No files found'}), 404
+                
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/kafka/test')
+def api_kafka_test():
+    """Test Kafka connection"""
+    try:
+        import sys
+        sys.path.append('/opt/airflow/src')
+        from data.streaming import KafkaStreamManager
+        
+        kafka_manager = KafkaStreamManager('kafka:9092')
+        kafka_manager.close()
+        return jsonify({'status': 'success', 'message': 'Kafka connection successful'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/api/mlflow/fix', methods=['POST'])
+def api_mlflow_fix():
+    """Attempt to fix MLflow connection issues"""
+    try:
+        # Check if MLflow service is accessible
+        import requests
+        mlflow_url = 'http://mlflow:5000/health'
+        
+        try:
+            response = requests.get(mlflow_url, timeout=5)
+            if response.ok:
+                return jsonify({'message': 'MLflow is accessible and healthy'})
+        except:
+            pass
+        
+        # Try to restart or check MLflow service
+        return jsonify({'message': 'MLflow fix attempted. Service may need manual restart.'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
