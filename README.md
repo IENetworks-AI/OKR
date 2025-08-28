@@ -1,151 +1,351 @@
-# OKR ML Pipeline - Unified Dashboard
+# Modern OKR Data Pipeline
 
-A production-ready machine learning pipeline that processes OKR (Objectives and Key Results) data through a complete ETL workflow, with real-time streaming via Kafka, workflow orchestration using Airflow, and ML experiment tracking with MLflow. Now features a modern unified dashboard for complete pipeline management.
+A comprehensive, modern data pipeline solution for OKR (Objectives and Key Results) data processing, featuring real-time streaming, automated workflows, and unified monitoring.
 
-## 🏢 Project Overview
+## 🚀 Features
 
-This comprehensive ML pipeline system enables organizations to:
-
-- **Process OKR Data**: Automated ETL pipeline for CSV files containing organizational objectives and key results
-- **Real-time Streaming**: Kafka-based data streaming for live data processing
-- **Workflow Orchestration**: Airflow DAGs manage complex data processing workflows
-- **ML Model Training**: Automated model training and evaluation with performance tracking
-- **Experiment Tracking**: MLflow integration for model versioning and experiment management
-- **Unified Dashboard**: Modern web interface with real-time monitoring, file management, and service control
-- **File Management**: Built-in upload/download functionality for all data types
-- **Production Deployment**: Docker-based deployment ready for Oracle Cloud Infrastructure
+- **Real-time Data Processing**: Kafka-based streaming for live data ingestion
+- **Automated Workflows**: Apache Airflow DAGs for scheduled data processing
+- **Unified Dashboard**: Real-time monitoring of all services and data quality
+- **PostgreSQL Storage**: Reliable data storage with proper schema management
+- **Docker Containerization**: Easy deployment and scaling
+- **Comprehensive Monitoring**: System health, data quality, and pipeline status tracking
+- **GitHub Actions**: Automated CI/CD for Oracle server deployment
 
 ## 🏗️ Architecture
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Data Sources  │───▶│  Kafka Stream   │───▶│  Airflow DAGs   │
-│   (CSV Files)   │    │  (Real-time)    │    │ (Orchestration) │
+│   Data Sources  │    │   Apache Kafka  │    │   PostgreSQL    │
+│                 │────│                 │────│                 │
+│ • API Endpoints │    │ • Real-time     │    │ • Data Storage  │
+│ • CSV Files     │    │   Streaming     │    │ • Metadata      │
+│ • Real-time     │    │ • Event Bus     │    │ • Analytics     │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
-                                                        │
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   PostgreSQL    │◀───│   ETL Pipeline  │◀───│  Data Processing│
-│  (3-tier DB)    │    │  (Transform)    │    │   (Validation)  │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                                │
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│     MLflow      │◀───│  Model Training │◀───│   ML Pipeline   │
-│ (Experiments)   │    │  (Automated)    │    │  (Features)     │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                                │
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  API Dashboard  │◀───│   Flask API     │◀───│     Nginx       │
-│   (Monitoring)  │    │  (REST APIs)    │    │ (Load Balancer) │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │ Apache Airflow  │
+                    │                 │
+                    │ • DAG Scheduler │
+                    │ • Workflow Mgmt │
+                    │ • Task Executor │
+                    └─────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │ Unified Dashboard│
+                    │                 │
+                    │ • Real-time Mon │
+                    │ • Data Quality  │
+                    │ • System Health │
+                    └─────────────────┘
 ```
+
+## 📋 Prerequisites
+
+- Docker and Docker Compose
+- Git
+- 4GB+ RAM recommended
+- 10GB+ free disk space
 
 ## 🚀 Quick Start
 
-### One-Command Setup
-```bash
-# Start the complete pipeline with unified dashboard
-./start_unified_pipeline.sh
-```
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd <repository-name>
+   ```
 
-### Access Points:
-- **🌟 Unified Dashboard**: http://localhost:3000 (Main entry point)
-- **🔧 OKR API**: http://localhost:5001
-- **📈 MLflow UI**: http://localhost:5000
-- **🌊 Airflow UI**: http://localhost:8081 (admin/admin)
-- **📁 Kafka UI**: http://localhost:8085
+2. **Start all services**
+   ```bash
+   chmod +x modern_project/scripts/start_all_services.sh
+   ./modern_project/scripts/start_all_services.sh
+   ```
 
-### Dashboard Features:
-- **Real-time Monitoring**: Live system metrics and service status
-- **File Management**: Upload/download files with drag-and-drop interface
-- **Service Control**: Start/stop/restart services directly from the UI
-- **Pipeline Logs**: View real-time pipeline execution logs
-- **System Analytics**: Charts and graphs for performance monitoring
-
-For detailed setup instructions:
-- See `LOCAL_SETUP.md` for local development setup
-- See `ORACLE_DEPLOYMENT.md` for production deployment on Oracle Cloud
+3. **Access the services**
+   - **Dashboard**: http://localhost:5000
+   - **Airflow**: http://localhost:8080 (admin/admin)
+   - **PostgreSQL Data**: localhost:5433 (okr_admin/okr_password)
+   - **Kafka**: localhost:9092
 
 ## 📁 Project Structure
 
 ```
-OKR/
-├── src/                        # Source code
-│   ├── dags/                   # Airflow DAGs (workflow orchestration)
-│   ├── models/                 # ML model training and evaluation
-│   ├── data/                   # Data processing and streaming
-│   ├── utils/                  # Utility functions and helpers
-│   └── dashboard/              # Web dashboard application
-├── apps/                       # Application containers
-│   └── api/                    # Flask REST API
-├── data/                       # Data storage and processing
-│   ├── raw/                    # Raw CSV input files
-│   ├── processed/              # Cleaned and transformed data
-│   ├── final/                  # Model-ready datasets
-│   └── models/                 # Trained ML models and artifacts
-├── configs/                    # Configuration files
-├── deploy/                     # Production deployment configurations
-├── kafka_pipeline/             # Kafka producers and consumers
-├── scripts/                    # Utility and management scripts
-├── docker-compose.yml          # Complete service orchestration
-├── requirements.txt            # Python dependencies
-└── *.md                        # Documentation files
+modern_project/
+├── dags/                          # Airflow DAGs
+│   ├── plan_tasks_pipeline_dag.py # API data processing
+│   ├── csv_data_pipeline_dag.py   # CSV file processing
+│   └── data_monitoring_dag.py     # System monitoring
+├── kafka_pipeline/                # Kafka components
+│   ├── producers/                 # Data producers
+│   └── consumers/                 # Data consumers
+├── dashboard/                     # Unified dashboard
+│   ├── app.py                     # Flask application
+│   └── templates/                 # HTML templates
+├── configs/                       # Configuration files
+├── scripts/                       # Utility scripts
+├── data/                          # Data directories
+│   ├── raw/                       # Raw data files
+│   ├── processed/                 # Processed data
+│   └── final/                     # Final datasets
+└── docker-compose.yml            # Service orchestration
 ```
 
-## 🔧 Core Services
+## 🔧 Configuration
 
-- **Kafka**: Real-time data streaming and message processing
-- **Airflow**: Workflow orchestration and DAG management
-- **PostgreSQL**: Multi-tier data storage (raw, processed, curated)
-- **MLflow**: ML experiment tracking and model versioning
-- **Flask API**: REST endpoints and dashboard interface
-- **Nginx**: Load balancing and reverse proxy
-- **Oracle DB**: Optional enterprise database integration
+### Environment Variables
 
-## 📊 Workflow Overview
+Create a `.env` file in the project root:
 
-### 1. Data Ingestion
-- CSV files placed in `data/raw/` are automatically discovered
-- Files are processed through 3-tier database architecture:
-  - **okr_raw**: Original data with metadata
-  - **okr_processed**: Cleaned and validated data
-  - **okr_curated**: Model-ready JSON documents
+```env
+# API Configuration
+EMAIL=your-email@example.com
+PASSWORD=your-password
+FIREBASE_API_KEY=your-firebase-api-key
+TENANT_ID=your-tenant-id
 
-### 2. Stream Processing
-- Kafka streams handle real-time data flow between components
-- Topics: `okr_raw_ingest`, `okr_processed_updates`
-- Reliable message delivery with configurable retention
+# Database Configuration
+POSTGRES_USER=okr_admin
+POSTGRES_PASSWORD=okr_password
+POSTGRES_DB=postgres
 
-### 3. ML Pipeline
-- Automated model training triggered by data updates
-- MLflow tracks experiments, parameters, and model performance
-- Model evaluation and validation with automated deployment
+# Kafka Configuration
+KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+KAFKA_TOPIC=plan_tasks_topic
 
-### 4. Monitoring & Control
-- Web dashboard for pipeline monitoring and control
-- Airflow UI for workflow management
-- Real-time metrics and alerting
+# Security
+SECRET_KEY=your-secret-key-change-in-production
+```
 
-## 🚀 Getting Started
+### Pipeline Configuration
 
-1. **Local Development**: See `LOCAL_SETUP.md`
-2. **Production Deployment**: See `ORACLE_DEPLOYMENT.md`
-3. **Configuration**: See `ORACLE_CONFIG.md`
+Edit `configs/pipeline_config.yaml` to customize:
+- Database connections
+- Kafka topics and settings
+- Monitoring thresholds
+- DAG schedules
+- Data processing parameters
 
-## 📈 Key Features
+## 📊 Data Processing Workflows
 
-- **Production Ready**: Docker-based deployment with proper resource management
-- **Scalable**: Horizontal scaling support for Kafka and database components
-- **Reliable**: Health checks, restart policies, and error handling
-- **Configurable**: Environment-based configuration for different deployment scenarios
-- **Monitored**: Comprehensive logging and monitoring across all components
+### 1. Plan Tasks Pipeline (`plan_tasks_pipeline_dag.py`)
+- **Schedule**: Hourly
+- **Source**: Firebase API
+- **Process**: Fetch → Flatten → Store → Stream
+- **Output**: PostgreSQL + Kafka topics
 
-## 🔗 External Access
+### 2. CSV Data Pipeline (`csv_data_pipeline_dag.py`)
+- **Schedule**: Daily
+- **Source**: CSV files in `data/raw/`
+- **Process**: Read → Clean → Transform → Store → Stream
+- **Output**: Processed datasets in PostgreSQL
 
-All services are accessible via the main application URL:
-- **Production**: `http://YOUR_ORACLE_SERVER_IP`
-- **Local**: `http://localhost`
+### 3. Data Monitoring (`data_monitoring_dag.py`)
+- **Schedule**: Hourly
+- **Process**: Health checks → Quality assessment → Alerts
+- **Output**: Monitoring metrics and reports
 
-Individual service access (development only):
-- Airflow: `:8081`
-- MLflow: `:5000`
-- Kafka UI: `:8085`
+## 🖥️ Dashboard Features
+
+The unified dashboard provides:
+
+- **System Health**: CPU, memory, disk usage
+- **Service Status**: All services health and connectivity
+- **Pipeline Monitoring**: DAG execution status and history
+- **Data Quality**: Table statistics and data freshness
+- **Kafka Topics**: Topic status and message counts
+- **Real-time Charts**: Interactive visualizations
+- **Auto-refresh**: Updates every 30 seconds
+
+## 🔍 Monitoring and Alerts
+
+### System Health Monitoring
+- CPU usage thresholds
+- Memory utilization tracking
+- Disk space monitoring
+- Service connectivity checks
+
+### Data Quality Monitoring
+- Record count validation
+- Data freshness checks
+- Schema validation
+- Anomaly detection
+
+### Pipeline Monitoring
+- DAG execution tracking
+- Task failure alerts
+- Performance metrics
+- Retry and error handling
+
+## 🛠️ Maintenance
+
+### View Logs
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f airflow-webserver
+docker-compose logs -f dashboard
+docker-compose logs -f kafka
+```
+
+### Restart Services
+```bash
+# Restart all
+docker-compose restart
+
+# Restart specific service
+docker-compose restart dashboard
+```
+
+### Stop Services
+```bash
+docker-compose down
+```
+
+### Update DAGs
+1. Modify files in `dags/` directory
+2. Airflow will automatically detect changes
+3. Refresh the Airflow web UI
+
+## 📈 Scaling and Performance
+
+### Horizontal Scaling
+- Add more Kafka partitions for parallel processing
+- Scale Airflow workers using CeleryExecutor
+- Use PostgreSQL read replicas for analytics
+
+### Performance Optimization
+- Adjust Kafka batch sizes and retention policies
+- Optimize SQL queries and add indexes
+- Configure Airflow parallelism settings
+- Use connection pooling
+
+## 🔒 Security
+
+### Production Considerations
+- Change all default passwords
+- Use proper SSL certificates
+- Configure firewall rules
+- Enable authentication and authorization
+- Regular security updates
+
+### Environment Variables
+- Store sensitive data in `.env` files
+- Use Docker secrets for production
+- Rotate API keys and passwords regularly
+
+## 🚀 Deployment
+
+### Local Development
+Use the provided `start_all_services.sh` script for local development.
+
+### Oracle Server Deployment
+GitHub Actions workflows are configured for Oracle server deployment:
+- `.github/workflows/deploy.yml` - Production deployment
+- `.github/workflows/ci.yml` - Continuous integration
+
+### Manual Deployment
+1. Copy project files to server
+2. Install Docker and Docker Compose
+3. Configure environment variables
+4. Run the startup script
+5. Configure reverse proxy (nginx) if needed
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+1. **Port Conflicts**
+   ```bash
+   # Check what's using a port
+   lsof -i :5000
+   
+   # Kill process using port
+   kill -9 $(lsof -ti:5000)
+   ```
+
+2. **Database Connection Issues**
+   ```bash
+   # Check PostgreSQL status
+   docker-compose logs postgres
+   
+   # Test connection
+   docker exec -it okr_postgres_data psql -U okr_admin -d postgres
+   ```
+
+3. **Kafka Connection Issues**
+   ```bash
+   # Check Kafka status
+   docker-compose logs kafka
+   
+   # List topics
+   docker exec -it okr_kafka kafka-topics --bootstrap-server localhost:9092 --list
+   ```
+
+4. **Airflow Issues**
+   ```bash
+   # Reset Airflow database
+   docker-compose run --rm airflow-init airflow db reset
+   
+   # Check scheduler logs
+   docker-compose logs airflow-scheduler
+   ```
+
+### Performance Issues
+- Monitor resource usage in dashboard
+- Check Docker container resources
+- Review PostgreSQL query performance
+- Analyze Kafka consumer lag
+
+## 📚 API Documentation
+
+### Dashboard API Endpoints
+
+- `GET /api/health` - Health check
+- `GET /api/system-health` - System metrics
+- `GET /api/pipeline-status` - Pipeline execution status
+- `GET /api/kafka-topics` - Kafka topic information
+- `GET /api/data-quality` - Data quality metrics
+- `GET /api/refresh` - Force cache refresh
+- `GET /api/charts` - Chart data for visualizations
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🆘 Support
+
+For support and questions:
+- Create an issue in the repository
+- Check the troubleshooting section
+- Review the logs for error details
+
+## 🔄 Changelog
+
+### v2.0.0 (Latest)
+- Modern project structure
+- Removed MLflow dependency
+- Added unified dashboard
+- Enhanced monitoring capabilities
+- Improved error handling
+- Added Kafka streaming
+- PostgreSQL optimization
+- Docker containerization
+- GitHub Actions CI/CD
+
+### v1.0.0
+- Initial implementation
+- Basic Airflow setup
+- MLflow integration (deprecated)
+- Oracle database support (removed)

@@ -1,5 +1,0 @@
-[2025-08-26 08:44:44 +0000] [20569] [INFO] Starting gunicorn 22.0.0
-[2025-08-26 08:44:44 +0000] [20569] [INFO] Listening at: http://[::]:8793 (20569)
-[2025-08-26 08:44:44 +0000] [20569] [INFO] Using worker: sync
-[2025-08-26 08:44:44 +0000] [20571] [INFO] Booting worker with pid: 20571
-[2025-08-26 08:44:44 +0000] [20572] [INFO] Booting worker with pid: 20572
