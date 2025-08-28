@@ -21,6 +21,10 @@ from werkzeug.utils import secure_filename
 from flask import Flask, render_template, jsonify, request, redirect, url_for, send_file, flash, send_from_directory
 from flask_socketio import SocketIO, emit
 import docker
+from kafka import KafkaProducer, KafkaConsumer, KafkaAdminClient
+from kafka.admin.config_resource import ConfigResource, ConfigResourceType
+import mlflow
+from mlflow.tracking import MlflowClient
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -48,13 +52,14 @@ for folder in [app.config['UPLOAD_FOLDER'], app.config['DOWNLOAD_FOLDER']]:
 # Enhanced global state
 dashboard_state = {
     'services': {
-        'kafka': {'status': 'unknown', 'last_check': None, 'port': '9092', 'url': 'localhost:9092'},
-        'airflow': {'status': 'unknown', 'last_check': None, 'port': '8081', 'url': 'http://localhost:8081'},
-        'postgres': {'status': 'unknown', 'last_check': None, 'port': '5433', 'url': 'localhost:5433'},
-        'api': {'status': 'unknown', 'last_check': None, 'port': '5001', 'url': 'http://localhost:5001'},
-        'mlflow': {'status': 'unknown', 'last_check': None, 'port': '5000', 'url': 'http://localhost:5000'},
-        'redis': {'status': 'unknown', 'last_check': None, 'port': '6379', 'url': 'localhost:6379'},
-        'docker': {'status': 'unknown', 'last_check': None, 'containers': 0},
+        'kafka': {'status': 'unknown', 'last_check': None, 'port': '9092', 'url': 'localhost:9092', 'description': 'Message Streaming'},
+        'airflow': {'status': 'unknown', 'last_check': None, 'port': '8081', 'url': 'http://localhost:8081', 'description': 'Workflow Orchestration'},
+        'postgres': {'status': 'unknown', 'last_check': None, 'port': '5433', 'url': 'localhost:5433', 'description': 'Database Server'},
+        'api': {'status': 'unknown', 'last_check': None, 'port': '8082', 'url': 'http://localhost:8082', 'description': 'OKR API Service'},
+        'mlflow': {'status': 'unknown', 'last_check': None, 'port': '5001', 'url': 'http://localhost:5001', 'description': 'ML Experiment Tracking'},
+        'redis': {'status': 'unknown', 'last_check': None, 'port': '6379', 'url': 'localhost:6379', 'description': 'Cache & Message Broker'},
+        'docker': {'status': 'unknown', 'last_check': None, 'containers': 0, 'description': 'Container Runtime'},
+        'kafka_ui': {'status': 'unknown', 'last_check': None, 'port': '8080', 'url': 'http://localhost:8080', 'description': 'Kafka Management UI'},
     },
     'system': {
         'cpu_percent': 0,
@@ -145,6 +150,103 @@ class SystemMonitor:
 
 monitor = SystemMonitor()
 
+class KafkaManager:
+    """Kafka integration manager"""
+    
+    def __init__(self):
+        self.bootstrap_servers = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
+        self.producer = None
+        self.admin_client = None
+    
+    def get_producer(self):
+        """Get Kafka producer instance"""
+        if not self.producer:
+            try:
+                self.producer = KafkaProducer(
+                    bootstrap_servers=[self.bootstrap_servers],
+                    value_serializer=lambda x: json.dumps(x).encode('utf-8')
+                )
+            except Exception as e:
+                logger.error(f"Failed to create Kafka producer: {e}")
+        return self.producer
+    
+    def get_admin_client(self):
+        """Get Kafka admin client"""
+        if not self.admin_client:
+            try:
+                self.admin_client = KafkaAdminClient(
+                    bootstrap_servers=[self.bootstrap_servers]
+                )
+            except Exception as e:
+                logger.error(f"Failed to create Kafka admin client: {e}")
+        return self.admin_client
+    
+    def get_topics(self):
+        """Get list of Kafka topics"""
+        try:
+            admin = self.get_admin_client()
+            if admin:
+                metadata = admin.describe_topics()
+                return list(metadata.keys())
+        except Exception as e:
+            logger.error(f"Failed to get Kafka topics: {e}")
+        return []
+    
+    def send_message(self, topic, message):
+        """Send message to Kafka topic"""
+        try:
+            producer = self.get_producer()
+            if producer:
+                future = producer.send(topic, message)
+                producer.flush()
+                return True
+        except Exception as e:
+            logger.error(f"Failed to send Kafka message: {e}")
+        return False
+
+class MLflowManager:
+    """MLflow integration manager"""
+    
+    def __init__(self):
+        self.tracking_uri = os.getenv('MLFLOW_TRACKING_URI', 'http://localhost:5001')
+        mlflow.set_tracking_uri(self.tracking_uri)
+        self.client = None
+    
+    def get_client(self):
+        """Get MLflow client instance"""
+        if not self.client:
+            try:
+                self.client = MlflowClient(tracking_uri=self.tracking_uri)
+            except Exception as e:
+                logger.error(f"Failed to create MLflow client: {e}")
+        return self.client
+    
+    def get_experiments(self):
+        """Get list of MLflow experiments"""
+        try:
+            client = self.get_client()
+            if client:
+                experiments = client.search_experiments()
+                return [{'id': exp.experiment_id, 'name': exp.name, 'lifecycle_stage': exp.lifecycle_stage} for exp in experiments]
+        except Exception as e:
+            logger.error(f"Failed to get MLflow experiments: {e}")
+        return []
+    
+    def get_latest_runs(self, limit=10):
+        """Get latest MLflow runs"""
+        try:
+            client = self.get_client()
+            if client:
+                runs = client.search_runs(experiment_ids=[], max_results=limit)
+                return [{'run_id': run.info.run_id, 'status': run.info.status, 'start_time': run.info.start_time} for run in runs]
+        except Exception as e:
+            logger.error(f"Failed to get MLflow runs: {e}")
+        return []
+
+# Initialize managers
+kafka_manager = KafkaManager()
+mlflow_manager = MLflowManager()
+
 def background_monitoring():
     """Background thread for continuous monitoring"""
     while True:
@@ -199,7 +301,99 @@ def update_data_statistics():
 @app.route('/')
 def dashboard():
     """Main dashboard page"""
-    return render_template('enhanced_dashboard.html')
+    return render_template('unified_dashboard.html')
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint"""
+    return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
+
+@app.route('/api/kafka/topics')
+def get_kafka_topics():
+    """Get Kafka topics"""
+    topics = kafka_manager.get_topics()
+    return jsonify({'topics': topics})
+
+@app.route('/api/kafka/send', methods=['POST'])
+def send_kafka_message():
+    """Send message to Kafka topic"""
+    try:
+        data = request.json
+        topic = data.get('topic')
+        message = data.get('message')
+        
+        if not topic or not message:
+            return jsonify({'status': 'error', 'message': 'Topic and message are required'}), 400
+        
+        success = kafka_manager.send_message(topic, message)
+        if success:
+            return jsonify({'status': 'success', 'message': 'Message sent successfully'})
+        else:
+            return jsonify({'status': 'error', 'message': 'Failed to send message'}), 500
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/mlflow/experiments')
+def get_mlflow_experiments():
+    """Get MLflow experiments"""
+    experiments = mlflow_manager.get_experiments()
+    return jsonify({'experiments': experiments})
+
+@app.route('/api/mlflow/runs')
+def get_mlflow_runs():
+    """Get latest MLflow runs"""
+    limit = request.args.get('limit', 10, type=int)
+    runs = mlflow_manager.get_latest_runs(limit)
+    return jsonify({'runs': runs})
+
+@app.route('/api/data/files')
+def get_data_files():
+    """Get data folder file listing with detailed info"""
+    try:
+        data_folder = project_root / 'data'
+        files_info = []
+        
+        for folder in ['raw', 'processed', 'final', 'backup']:
+            folder_path = data_folder / folder
+            if folder_path.exists():
+                for file_path in folder_path.rglob('*'):
+                    if file_path.is_file():
+                        stat = file_path.stat()
+                        files_info.append({
+                            'name': file_path.name,
+                            'path': str(file_path.relative_to(project_root)),
+                            'folder': folder,
+                            'size': stat.st_size,
+                            'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                            'extension': file_path.suffix
+                        })
+        
+        return jsonify({
+            'files': sorted(files_info, key=lambda x: x['modified'], reverse=True),
+            'total_files': len(files_info),
+            'total_size': sum(f['size'] for f in files_info)
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/pipeline/trigger/<pipeline_type>', methods=['POST'])
+def trigger_pipeline(pipeline_type):
+    """Trigger specific pipeline components"""
+    try:
+        if pipeline_type == 'data_ingestion':
+            # Trigger Airflow DAG for data ingestion
+            subprocess.Popen(['docker', 'exec', 'okr_airflow_scheduler', 
+                            'airflow', 'dags', 'trigger', 'enhanced_csv_ingestion_dag'])
+        elif pipeline_type == 'model_training':
+            subprocess.Popen(['docker', 'exec', 'okr_airflow_scheduler', 
+                            'airflow', 'dags', 'trigger', 'model_training'])
+        elif pipeline_type == 'etl':
+            subprocess.Popen(['docker', 'exec', 'okr_airflow_scheduler', 
+                            'airflow', 'dags', 'trigger', 'etl_pipeline'])
+        
+        return jsonify({'status': 'success', 'message': f'{pipeline_type} pipeline triggered'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/status')
 def api_status():
@@ -243,66 +437,88 @@ def start_pipeline():
 
 @app.route('/api/files/upload', methods=['POST'])
 def upload_file():
-    """Enhanced file upload with validation and processing"""
+    """Enhanced file upload with validation and processing - supports multiple files"""
     try:
-        if 'file' not in request.files:
-            return jsonify({'status': 'error', 'message': 'No file selected'}), 400
+        # Handle both single file and multiple files
+        files = request.files.getlist('files') if 'files' in request.files else [request.files.get('file')]
         
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'status': 'error', 'message': 'No file selected'}), 400
+        if not files or all(f is None or f.filename == '' for f in files):
+            return jsonify({'status': 'error', 'message': 'No files selected'}), 400
         
-        # Validate file type and size
-        allowed_extensions = {'.csv', '.xlsx', '.xls', '.json', '.txt', '.pdf', '.zip', '.tar', '.gz'}
-        file_ext = os.path.splitext(file.filename)[1].lower()
+        uploaded_files = []
+        errors = []
+        allowed_extensions = {'.csv', '.xlsx', '.xls', '.json', '.txt', '.pdf', '.zip', '.tar', '.gz', '.py', '.sql'}
         
-        if file_ext not in allowed_extensions:
+        for file in files:
+            if file is None or file.filename == '':
+                continue
+                
+            try:
+                # Validate file type
+                file_ext = os.path.splitext(file.filename)[1].lower()
+                
+                if file_ext not in allowed_extensions:
+                    errors.append(f'File type {file_ext} not allowed for {file.filename}')
+                    continue
+                
+                filename = secure_filename(file.filename)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                original_name = filename
+                filename = f"{timestamp}_{filename}"
+                
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(file_path)
+                
+                # Get file info
+                file_size = os.path.getsize(file_path)
+                file_type = file.content_type or 'unknown'
+                
+                # Process file based on type
+                processing_result = process_uploaded_file(file_path, file_ext, original_name)
+                
+                # Add to recent uploads
+                file_info = {
+                    'name': filename,
+                    'original_name': original_name,
+                    'size': file_size,
+                    'uploaded': datetime.now().isoformat(),
+                    'type': file_type,
+                    'extension': file_ext,
+                    'processing_status': processing_result['status'],
+                    'processing_message': processing_result.get('message', ''),
+                    'records_count': processing_result.get('records_count', 0)
+                }
+                
+                uploaded_files.append(file_info)
+                dashboard_state['data_stats']['recent_uploads'].insert(0, file_info)
+                
+            except Exception as e:
+                errors.append(f'Error uploading {file.filename}: {str(e)}')
+        
+        # Limit recent uploads
+        dashboard_state['data_stats']['recent_uploads'] = dashboard_state['data_stats']['recent_uploads'][:20]
+        
+        # Update total statistics
+        update_data_statistics()
+        
+        if uploaded_files:
+            status = 'success' if not errors else 'partial'
+            message = f'{len(uploaded_files)} file(s) uploaded successfully'
+            if errors:
+                message += f', {len(errors)} error(s)'
+            
             return jsonify({
-                'status': 'error', 
-                'message': f'File type {file_ext} not allowed. Allowed types: {", ".join(allowed_extensions)}'
-            }), 400
-        
-        if file:
-            filename = secure_filename(file.filename)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            original_name = filename
-            filename = f"{timestamp}_{filename}"
-            
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(file_path)
-            
-            # Get file info
-            file_size = os.path.getsize(file_path)
-            file_type = file.content_type or 'unknown'
-            
-            # Process file based on type
-            processing_result = process_uploaded_file(file_path, file_ext, original_name)
-            
-            # Add to recent uploads
-            file_info = {
-                'name': filename,
-                'original_name': original_name,
-                'size': file_size,
-                'uploaded': datetime.now().isoformat(),
-                'type': file_type,
-                'extension': file_ext,
-                'processing_status': processing_result['status'],
-                'processing_message': processing_result.get('message', ''),
-                'records_count': processing_result.get('records_count', 0)
-            }
-            
-            dashboard_state['data_stats']['recent_uploads'].insert(0, file_info)
-            dashboard_state['data_stats']['recent_uploads'] = dashboard_state['data_stats']['recent_uploads'][:10]
-            
-            # Update total statistics
-            update_data_statistics()
-            
-            return jsonify({
-                'status': 'success', 
-                'message': f'File {original_name} uploaded and processed successfully',
-                'file_info': file_info,
-                'processing_result': processing_result
+                'status': status,
+                'message': message,
+                'uploaded_files': uploaded_files,
+                'errors': errors
             })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'No files could be uploaded',
+                'errors': errors
+            }), 400
     except Exception as e:
         logger.error(f"File upload error: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -385,36 +601,35 @@ def process_uploaded_file(file_path, file_ext, original_name):
             'records_count': 0
         }
 
-@app.route('/api/files/download/<filename>')
-def download_file(filename):
+@app.route('/api/files/download/<path:filepath>')
+def download_file(filepath):
     """Enhanced file download with security checks"""
     try:
         # Security check - prevent directory traversal
-        if '..' in filename or '/' in filename or '\\' in filename:
-            return jsonify({'status': 'error', 'message': 'Invalid filename'}), 400
+        if '..' in filepath:
+            return jsonify({'status': 'error', 'message': 'Invalid file path'}), 400
         
-        # Check both upload and download folders
-        for folder_name, folder_path in [('uploads', app.config['UPLOAD_FOLDER']), 
-                                        ('downloads', app.config['DOWNLOAD_FOLDER'])]:
-            file_path = os.path.join(folder_path, filename)
-            if os.path.exists(file_path):
-                # Log download activity
-                logger.info(f"File downloaded: {filename} from {folder_name}")
-                
-                # Update download statistics
-                dashboard_state['data_stats']['recent_downloads'] = dashboard_state['data_stats'].get('recent_downloads', [])
-                download_info = {
-                    'name': filename,
-                    'downloaded': datetime.now().isoformat(),
-                    'folder': folder_name,
-                    'size': os.path.getsize(file_path)
-                }
-                dashboard_state['data_stats']['recent_downloads'].insert(0, download_info)
-                dashboard_state['data_stats']['recent_downloads'] = dashboard_state['data_stats']['recent_downloads'][:10]
-                
-                return send_file(file_path, as_attachment=True)
+        # Construct full file path
+        full_path = project_root / filepath
         
-        return jsonify({'status': 'error', 'message': 'File not found'}), 404
+        if not full_path.exists():
+            return jsonify({'status': 'error', 'message': 'File not found'}), 404
+        
+        # Log download activity
+        logger.info(f"File downloaded: {filepath}")
+        
+        # Update download statistics
+        dashboard_state['data_stats']['recent_downloads'] = dashboard_state['data_stats'].get('recent_downloads', [])
+        download_info = {
+            'name': full_path.name,
+            'downloaded': datetime.now().isoformat(),
+            'path': filepath,
+            'size': full_path.stat().st_size
+        }
+        dashboard_state['data_stats']['recent_downloads'].insert(0, download_info)
+        dashboard_state['data_stats']['recent_downloads'] = dashboard_state['data_stats']['recent_downloads'][:10]
+        
+        return send_file(str(full_path), as_attachment=True)
     except Exception as e:
         logger.error(f"File download error: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -649,4 +864,4 @@ if __name__ == '__main__':
     logger.info(f"Download folder: {app.config['DOWNLOAD_FOLDER']}")
     
     # Run the app
-    socketio.run(app, host='0.0.0.0', port=8080, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)

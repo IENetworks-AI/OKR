@@ -305,29 +305,27 @@ services:
     image: python:3.11-slim
     container_name: okr_mlflow
     ports:
-      - "5000:5000"
+      - "5001:5001"  # Changed port to avoid conflicts with dashboard
     volumes:
       - ./:/app
       - mlflow_data:/mlflow
       - ./requirements.txt:/requirements.txt
     working_dir: /app
     depends_on:
-      airflow-db:
-        condition: service_healthy
       postgres:
         condition: service_healthy
     environment:
-      - MLFLOW_TRACKING_URI=http://0.0.0.0:5000
-      - MLFLOW_BACKEND_STORE_URI=postgresql://airflow:airflow@airflow-db:5432/airflow
-      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow
+      - MLFLOW_TRACKING_URI=http://0.0.0.0:5001
+      - MLFLOW_BACKEND_STORE_URI=postgresql://okr_admin:okr_password@postgres:5432/postgres
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
       - MLFLOW_SERVE_ARTIFACTS=true
       - PYTHONPATH=/app:/app/src
     command: >
       bash -c "apt-get update && apt-get install -y gcc g++ curl && 
-               pip install --no-cache-dir mlflow==2.8.1 psycopg2-binary==2.9.9 pandas scikit-learn &&
-               mlflow server --host 0.0.0.0 --port 5000 
-               --backend-store-uri postgresql://airflow:airflow@airflow-db:5432/airflow 
-               --default-artifact-root /mlflow 
+               pip install --no-cache-dir mlflow==2.8.1 psycopg2-binary==2.9.9 pandas scikit-learn boto3 &&
+               mlflow server --host 0.0.0.0 --port 5001 
+               --backend-store-uri postgresql://okr_admin:okr_password@postgres:5432/postgres 
+               --default-artifact-root /mlflow/artifacts 
                --serve-artifacts"
     restart: unless-stopped
     networks:
@@ -346,7 +344,7 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5000/api/2.0/mlflow/experiments/list || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:5001/api/2.0/mlflow/experiments/list || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 15
@@ -357,7 +355,7 @@ services:
     image: python:3.11-slim
     container_name: okr_unified_dashboard
     ports:
-      - "3000:3000"  # Main dashboard port
+      - "5000:5000"  # Main dashboard port (moved from MLflow)
     volumes:
       - ./:/app
       - ./data:/app/data
@@ -366,14 +364,21 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
     environment:
       - PYTHONPATH=/app:/app/src:/app/apps
       - FLASK_ENV=production
       - FLASK_DEBUG=0
+      - MLFLOW_TRACKING_URI=http://mlflow:5001
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DATABASE_URL=postgresql://okr_admin:okr_password@postgres:5432/postgres
     command: >
       bash -c "apt-get update && apt-get install -y gcc g++ curl docker.io && 
                pip install --no-cache-dir -r dashboard_requirements.txt &&
-               python dashboard_app.py"
+               python dashboard_main.py"
     restart: unless-stopped
     networks:
       - okr_net
@@ -391,7 +396,7 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 10
