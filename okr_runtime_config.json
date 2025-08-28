@@ -1,0 +1,19 @@
+{
+  "tenant_id": "9b320d7d-bece-4dd4-bb87-dd226f70daef",
+  "company_id": "52514de4-46aa-47a6-9caa-edbd9251a428",
+  "user_id": "1939e6ff-ffa6-4c2e-aa7d-b7f9f0189508",
+  "planning_period_id": "43246170-b1ef-4e88-92bc-fc596d2dd2ae",
+  "email": "surafel@ienetworks.co",
+  "firebase_api_key": "AIzaSyDDOSSGJy2izlW9CzhzhjHUTEVur0J16zs",
+  "kafka_bootstrap_servers": "localhost:9092",
+  "airflow_url": "http://localhost:8080",
+  "dashboard_url": "http://localhost:5000",
+  "database_url": "postgresql://okr_admin:okr_password@localhost:5433/postgres",
+  "postgres": {
+    "host": "localhost",
+    "port": "5433",
+    "user": "okr_admin",
+    "database": "postgres"
+  },
+  "generated_at": "2025-08-28T09:38:29.181973"
+}

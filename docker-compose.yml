@@ -75,21 +75,24 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_LOG_RETENTION_HOURS: 168
       KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_HEAP_OPTS: "-Xmx1G -Xms1G"
+      KAFKA_JVM_PERFORMANCE_OPTS: "-server -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35 -XX:+ExplicitGCInvokesConcurrent -Djava.awt.headless=true"
     ports:
       - "9092:9092"
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - okr_net
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
-      interval: 30s
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 || exit 1"]
+      interval: 20s
       timeout: 10s
-      retries: 10
-      start_period: 60s
+      retries: 15
+      start_period: 120s
 
   # Zookeeper for Kafka
   zookeeper:
@@ -98,6 +101,9 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+      ZOOKEEPER_MAX_CLIENT_CNXNS: 60
     ports:
       - "2181:2181"
     restart: unless-stopped
@@ -105,12 +111,13 @@ services:
       - okr_net
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_data:/var/lib/zookeeper/log
     healthcheck:
       test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok"]
-      interval: 30s
+      interval: 20s
       timeout: 10s
       retries: 10
-      start_period: 30s
+      start_period: 60s
 
   # Airflow Initialization
   airflow-init:
@@ -132,7 +139,7 @@ services:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./data:/opt/airflow/data
-      - ./modern_project/configs:/opt/airflow/configs
+      - ./configs:/opt/airflow/configs
     depends_on:
       airflow-db:
         condition: service_healthy
@@ -161,7 +168,7 @@ services:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./data:/opt/airflow/data
-      - ./modern_project/configs:/opt/airflow/configs
+      - ./configs:/opt/airflow/configs
     depends_on:
       airflow-db:
         condition: service_healthy
@@ -193,7 +200,7 @@ services:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./data:/opt/airflow/data
-      - ./modern_project/configs:/opt/airflow/configs
+      - ./configs:/opt/airflow/configs
     depends_on:
       airflow-db:
         condition: service_healthy
@@ -204,7 +211,7 @@ services:
       - okr_net
     command: airflow scheduler
     healthcheck:
-      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname $(hostname)"]
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname $$(hostname)"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -219,7 +226,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./modern_project/dashboard:/app
+      - ./dashboard:/app
       - ./data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /app
@@ -228,12 +235,21 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
       - PYTHONPATH=/app
-      - FLASK_ENV=production
-      - FLASK_DEBUG=0
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - DATABASE_URL=postgresql://okr_admin:okr_password@postgres:5432/postgres
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - FLASK_DEBUG=${FLASK_DEBUG:-0}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-okr_admin}:${POSTGRES_PASSWORD:-okr_password}@postgres:5432/${POSTGRES_DB:-postgres}
+      - TENANT_ID=${TENANT_ID}
+      - COMPANY_ID=${COMPANY_ID}
+      - USER_ID=${USER_ID}
+      - PLANNING_PERIOD_ID=${PLANNING_PERIOD_ID}
+      - EMAIL=${EMAIL}
+      - PASSWORD=${PASSWORD}
+      - FIREBASE_API_KEY=${FIREBASE_API_KEY}
     restart: unless-stopped
     networks:
       - okr_net
@@ -251,7 +267,7 @@ services:
       dockerfile: Dockerfile.consumer
     container_name: okr_kafka_consumer
     volumes:
-      - ./modern_project/kafka_pipeline:/app
+      - ./kafka_pipeline:/app
       - ./data:/app/data
     working_dir: /app
     depends_on:
@@ -259,10 +275,19 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
       - PYTHONPATH=/app
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - DATABASE_URL=postgresql://okr_admin:okr_password@postgres:5432/postgres
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-okr_admin}:${POSTGRES_PASSWORD:-okr_password}@postgres:5432/${POSTGRES_DB:-postgres}
+      - TENANT_ID=${TENANT_ID}
+      - COMPANY_ID=${COMPANY_ID}
+      - USER_ID=${USER_ID}
+      - PLANNING_PERIOD_ID=${PLANNING_PERIOD_ID}
+      - EMAIL=${EMAIL}
+      - PASSWORD=${PASSWORD}
+      - FIREBASE_API_KEY=${FIREBASE_API_KEY}
     restart: unless-stopped
     networks:
       - okr_net

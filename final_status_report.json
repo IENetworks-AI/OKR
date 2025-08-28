@@ -1,0 +1,67 @@
+{
+  "timestamp": "2025-08-28T09:39:00.234290",
+  "overall_status": "healthy",
+  "services": {
+    "kafka": {
+      "status": "healthy",
+      "port": 9092,
+      "mode": "simulation"
+    },
+    "airflow": {
+      "status": "healthy",
+      "port": 8080,
+      "mode": "simulation",
+      "response_code": 200
+    },
+    "dashboard": {
+      "status": "healthy",
+      "port": 5000,
+      "mode": "simulation",
+      "tenant_id": "9b320d7d-bece-4dd4-bb87-dd226f70daef",
+      "company_id": "52514de4-46aa-47a6-9caa-edbd9251a428"
+    }
+  },
+  "configuration": {
+    "tenant_id": "9b320d7d-bece-4dd4-bb87-dd226f70daef",
+    "company_id": "52514de4-46aa-47a6-9caa-edbd9251a428",
+    "user_id": "1939e6ff-ffa6-4c2e-aa7d-b7f9f0189508",
+    "planning_period_id": "43246170-b1ef-4e88-92bc-fc596d2dd2ae",
+    "email": "surafel@ienetworks.co",
+    "firebase_api_key": "AIzaSyDDOSSGJy2izlW9CzhzhjHUTEVur0J16zs",
+    "kafka_bootstrap_servers": "localhost:9092",
+    "airflow_url": "http://localhost:8080",
+    "dashboard_url": "http://localhost:5000",
+    "database_url": "postgresql://okr_admin:okr_password@localhost:5433/postgres",
+    "postgres": {
+      "host": "localhost",
+      "port": "5433",
+      "user": "okr_admin",
+      "database": "postgres"
+    },
+    "generated_at": "2025-08-28T09:38:29.181973"
+  },
+  "recommendations": [
+    "\u2705 All services are running perfectly!",
+    "\ud83d\ude80 You can now access:",
+    "   - Airflow UI: http://localhost:8080",
+    "   - OKR Dashboard: http://localhost:5000",
+    "   - Kafka: localhost:9092"
+  ],
+  "process_info": {
+    "status": "running",
+    "mode": "simulation",
+    "services": {
+      "kafka": {
+        "port": 9092,
+        "pid": 5494,
+        "status": "running"
+      },
+      "airflow": {
+        "port": 8080,
+        "pid": 5495,
+        "status": "running"
+      }
+    },
+    "started_at": "2025-08-28T09:36:44+00:00"
+  }
+}
