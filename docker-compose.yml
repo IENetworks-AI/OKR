@@ -99,7 +99,7 @@ services:
     image: provectuslabs/kafka-ui:latest
     container_name: okr_kafka_ui
     ports:
-      - "8085:8080"
+      - "8080:8080"
     environment:
       - KAFKA_CLUSTERS_0_NAME=okr
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
@@ -224,7 +224,7 @@ services:
     container_name: okr_api
     working_dir: /app
     ports:
-      - "5001:5001"
+      - "8082:8082"
     volumes:
       - ./:/app
       - ./data:/app/data
@@ -244,9 +244,9 @@ services:
       - AIRFLOW_BASE_URL=http://airflow-webserver:8080
       - AIRFLOW_USER=admin
       - AIRFLOW_PASSWORD=admin
-    command: ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "2", "--worker-class", "sync", "--timeout", "120", "--keep-alive", "5", "--max-requests", "1000", "--max-requests-jitter", "100", "apps.api.app:app"]
+    command: ["gunicorn", "--bind", "0.0.0.0:8082", "--workers", "2", "--worker-class", "sync", "--timeout", "120", "--keep-alive", "5", "--max-requests", "1000", "--max-requests-jitter", "100", "apps.api.app:app"]
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5001/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8082/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -405,9 +405,9 @@ services:
   # OKR API Service
   okr-api:
     image: python:3.11-slim
-    container_name: okr_api
+    container_name: okr_api_service
     ports:
-      - "5001:5001"
+      - "8083:8083"
     volumes:
       - ./:/app
       - ./data:/app/data
@@ -426,7 +426,7 @@ services:
     command: >
       bash -c "apt-get update && apt-get install -y gcc g++ curl && 
                pip install --no-cache-dir flask requests joblib scikit-learn pandas numpy psycopg2-binary &&
-               python apps/api/app.py --host 0.0.0.0 --port 5001"
+               python apps/api/app.py --host 0.0.0.0 --port 8083"
     restart: unless-stopped
     networks:
       - okr_net
