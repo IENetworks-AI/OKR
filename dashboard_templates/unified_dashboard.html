@@ -1,0 +1,1408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OKR ML Pipeline - Unified Dashboard</title>
+    
+    <!-- Bootstrap 5.3 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    
+    <style>
+        :root {
+            --sidebar-width: 280px;
+            --sidebar-collapsed-width: 70px;
+            --navbar-height: 60px;
+            --primary-color: #2563eb;
+            --secondary-color: #1e40af;
+            --success-color: #059669;
+            --warning-color: #d97706;
+            --danger-color: #dc2626;
+            --info-color: #0891b2;
+            --dark-bg: #1e293b;
+            --light-bg: #f8fafc;
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background-color: var(--light-bg);
+            margin: 0;
+            padding: 0;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: var(--sidebar-width);
+            background: linear-gradient(180deg, var(--dark-bg) 0%, #334155 100%);
+            color: white;
+            z-index: 1000;
+            transition: all 0.3s ease;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .sidebar.collapsed {
+            width: var(--sidebar-collapsed-width);
+        }
+        
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .sidebar-header .logo {
+            width: 35px;
+            height: 35px;
+            background: var(--primary-color);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        
+        .sidebar-header .title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+        }
+        
+        .sidebar.collapsed .sidebar-header .title {
+            opacity: 0;
+        }
+        
+        .nav-menu {
+            padding: 20px 0;
+        }
+        
+        .nav-section {
+            margin-bottom: 30px;
+        }
+        
+        .nav-section-title {
+            padding: 0 20px 10px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.6);
+            letter-spacing: 0.5px;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+        }
+        
+        .sidebar.collapsed .nav-section-title {
+            opacity: 0;
+        }
+        
+        .nav-item {
+            margin-bottom: 5px;
+        }
+        
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .nav-link:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+        
+        .nav-link.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .nav-link i {
+            width: 20px;
+            margin-right: 12px;
+            font-size: 1rem;
+        }
+        
+        .nav-link .nav-text {
+            opacity: 1;
+            transition: opacity 0.3s ease;
+        }
+        
+        .sidebar.collapsed .nav-link .nav-text {
+            opacity: 0;
+        }
+        
+        /* Navbar */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: var(--sidebar-width);
+            right: 0;
+            height: var(--navbar-height);
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 999;
+            transition: left 0.3s ease;
+            box-shadow: var(--card-shadow);
+        }
+        
+        .sidebar.collapsed + .navbar {
+            left: var(--sidebar-collapsed-width);
+        }
+        
+        .navbar .toggle-btn {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            color: #64748b;
+            cursor: pointer;
+            margin-right: 20px;
+        }
+        
+        .navbar .breadcrumb {
+            margin: 0;
+            background: none;
+            padding: 0;
+        }
+        
+        .navbar .navbar-actions {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        /* Main Content */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            margin-top: var(--navbar-height);
+            padding: 20px;
+            transition: margin-left 0.3s ease;
+            min-height: calc(100vh - var(--navbar-height));
+        }
+        
+        .sidebar.collapsed ~ .main-content {
+            margin-left: var(--sidebar-collapsed-width);
+        }
+        
+        /* Cards */
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card-header {
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            border-radius: 12px 12px 0 0 !important;
+            padding: 15px 20px;
+        }
+        
+        .card-title {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #1e293b;
+        }
+        
+        /* Status indicators */
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-healthy {
+            background: rgba(5, 150, 105, 0.1);
+            color: var(--success-color);
+        }
+        
+        .status-unhealthy {
+            background: rgba(220, 38, 38, 0.1);
+            color: var(--danger-color);
+        }
+        
+        .status-unknown {
+            background: rgba(107, 114, 128, 0.1);
+            color: #6b7280;
+        }
+        
+        .status-running {
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--primary-color);
+        }
+        
+        /* Service Cards */
+        .service-card {
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        .service-card.healthy {
+            border-left-color: var(--success-color);
+        }
+        
+        .service-card.unhealthy {
+            border-left-color: var(--danger-color);
+        }
+        
+        /* Buttons */
+        .btn {
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .btn-primary:hover {
+            background: var(--secondary-color);
+            border-color: var(--secondary-color);
+        }
+        
+        /* Pipeline Flow */
+        .pipeline-flow {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 20px;
+            background: white;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .pipeline-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            flex: 1;
+        }
+        
+        .pipeline-step-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+            color: white;
+        }
+        
+        .pipeline-step-icon.active {
+            background: var(--primary-color);
+            animation: pulse 2s infinite;
+        }
+        
+        .pipeline-step-icon.completed {
+            background: var(--success-color);
+        }
+        
+        .pipeline-step-icon.pending {
+            background: #e2e8f0;
+            color: #64748b;
+        }
+        
+        .pipeline-arrow {
+            color: #cbd5e1;
+            font-size: 1.5rem;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        /* File Manager */
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid #f1f5f9;
+            transition: background-color 0.2s ease;
+        }
+        
+        .file-item:hover {
+            background-color: #f8fafc;
+        }
+        
+        .file-icon {
+            width: 30px;
+            margin-right: 10px;
+            text-align: center;
+        }
+        
+        .file-info {
+            flex: 1;
+        }
+        
+        .file-name {
+            font-weight: 500;
+            color: #1e293b;
+        }
+        
+        .file-meta {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            
+            .sidebar.show {
+                transform: translateX(0);
+            }
+            
+            .navbar {
+                left: 0;
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">OKR</div>
+            <div class="title">ML Pipeline</div>
+        </div>
+        
+        <nav class="nav-menu">
+            <div class="nav-section">
+                <div class="nav-section-title">Main</div>
+                <div class="nav-item">
+                    <a href="#" class="nav-link active" data-section="overview">
+                        <i class="fas fa-tachometer-alt"></i>
+                        <span class="nav-text">Overview</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#" class="nav-link" data-section="services">
+                        <i class="fas fa-server"></i>
+                        <span class="nav-text">Services</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#" class="nav-link" data-section="pipeline">
+                        <i class="fas fa-project-diagram"></i>
+                        <span class="nav-text">Pipeline</span>
+                    </a>
+                </div>
+            </div>
+            
+            <div class="nav-section">
+                <div class="nav-section-title">Data</div>
+                <div class="nav-item">
+                    <a href="#" class="nav-link" data-section="files">
+                        <i class="fas fa-folder"></i>
+                        <span class="nav-text">File Manager</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#" class="nav-link" data-section="kafka">
+                        <i class="fas fa-stream"></i>
+                        <span class="nav-text">Kafka</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#" class="nav-link" data-section="mlflow">
+                        <i class="fas fa-flask"></i>
+                        <span class="nav-text">MLflow</span>
+                    </a>
+                </div>
+            </div>
+            
+            <div class="nav-section">
+                <div class="nav-section-title">Tools</div>
+                <div class="nav-item">
+                    <a href="http://localhost:8081" target="_blank" class="nav-link">
+                        <i class="fas fa-wind"></i>
+                        <span class="nav-text">Airflow</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="http://localhost:8080" target="_blank" class="nav-link">
+                        <i class="fas fa-eye"></i>
+                        <span class="nav-text">Kafka UI</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="http://localhost:5001" target="_blank" class="nav-link">
+                        <i class="fas fa-chart-line"></i>
+                        <span class="nav-text">MLflow UI</span>
+                    </a>
+                </div>
+            </div>
+        </nav>
+    </div>
+    
+    <!-- Navbar -->
+    <nav class="navbar">
+        <button class="toggle-btn" id="sidebarToggle">
+            <i class="fas fa-bars"></i>
+        </button>
+        
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item active" id="currentSection">Overview</li>
+            </ol>
+        </nav>
+        
+        <div class="navbar-actions">
+            <span class="status-indicator status-healthy" id="systemStatus">System Healthy</span>
+            <button class="btn btn-sm btn-outline-primary" onclick="refreshData()">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+        </div>
+    </nav>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Overview Section -->
+        <div class="content-section" id="overview-section">
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h2>System Overview</h2>
+                    <p class="text-muted">Monitor and control your OKR ML Pipeline infrastructure</p>
+                </div>
+            </div>
+            
+            <!-- System Metrics -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-microchip text-primary fa-2x mb-2"></i>
+                            <h5>CPU Usage</h5>
+                            <h3 id="cpuUsage">0%</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-memory text-success fa-2x mb-2"></i>
+                            <h5>Memory</h5>
+                            <h3 id="memoryUsage">0%</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-hdd text-warning fa-2x mb-2"></i>
+                            <h5>Disk Usage</h5>
+                            <h3 id="diskUsage">0%</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-file text-info fa-2x mb-2"></i>
+                            <h5>Total Files</h5>
+                            <h3 id="totalFiles">0</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Services Status -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title">Services Status</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row" id="servicesGrid">
+                                <!-- Services will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Services Section -->
+        <div class="content-section d-none" id="services-section">
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h2>Services Management</h2>
+                    <p class="text-muted">Monitor and control individual services</p>
+                </div>
+            </div>
+            
+            <div class="row" id="detailedServices">
+                <!-- Detailed services will be populated by JavaScript -->
+            </div>
+        </div>
+        
+        <!-- Pipeline Section -->
+        <div class="content-section d-none" id="pipeline-section">
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h2>Pipeline Management</h2>
+                    <p class="text-muted">Control and monitor your ML pipeline workflows</p>
+                </div>
+            </div>
+            
+            <!-- Pipeline Flow Visualization -->
+            <div class="pipeline-flow">
+                <div class="pipeline-step">
+                    <div class="pipeline-step-icon pending" id="step-ingestion">
+                        <i class="fas fa-download"></i>
+                    </div>
+                    <div>
+                        <div class="fw-bold">Data Ingestion</div>
+                        <small class="text-muted">Collect & Import</small>
+                    </div>
+                    <button class="btn btn-sm btn-primary mt-2" onclick="triggerPipeline('data_ingestion')">
+                        <i class="fas fa-play"></i> Start
+                    </button>
+                </div>
+                
+                <div class="pipeline-arrow">
+                    <i class="fas fa-arrow-right"></i>
+                </div>
+                
+                <div class="pipeline-step">
+                    <div class="pipeline-step-icon pending" id="step-etl">
+                        <i class="fas fa-cogs"></i>
+                    </div>
+                    <div>
+                        <div class="fw-bold">ETL Process</div>
+                        <small class="text-muted">Transform & Clean</small>
+                    </div>
+                    <button class="btn btn-sm btn-primary mt-2" onclick="triggerPipeline('etl')">
+                        <i class="fas fa-play"></i> Start
+                    </button>
+                </div>
+                
+                <div class="pipeline-arrow">
+                    <i class="fas fa-arrow-right"></i>
+                </div>
+                
+                <div class="pipeline-step">
+                    <div class="pipeline-step-icon pending" id="step-training">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <div>
+                        <div class="fw-bold">Model Training</div>
+                        <small class="text-muted">Train & Validate</small>
+                    </div>
+                    <button class="btn btn-sm btn-primary mt-2" onclick="triggerPipeline('model_training')">
+                        <i class="fas fa-play"></i> Start
+                    </button>
+                </div>
+                
+                <div class="pipeline-arrow">
+                    <i class="fas fa-arrow-right"></i>
+                </div>
+                
+                <div class="pipeline-step">
+                    <div class="pipeline-step-icon pending" id="step-deployment">
+                        <i class="fas fa-rocket"></i>
+                    </div>
+                    <div>
+                        <div class="fw-bold">Deployment</div>
+                        <small class="text-muted">Deploy & Monitor</small>
+                    </div>
+                    <button class="btn btn-sm btn-success mt-2" onclick="startCompletePipeline()">
+                        <i class="fas fa-play-circle"></i> Deploy
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Pipeline Controls -->
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title">Pipeline Controls</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-success" onclick="startCompletePipeline()">
+                                    <i class="fas fa-play-circle"></i> Start Complete Pipeline
+                                </button>
+                                <button class="btn btn-warning" onclick="pausePipeline()">
+                                    <i class="fas fa-pause"></i> Pause Pipeline
+                                </button>
+                                <button class="btn btn-danger" onclick="stopPipeline()">
+                                    <i class="fas fa-stop"></i> Stop Pipeline
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title">Pipeline Status</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label">Current Status:</label>
+                                <span class="status-indicator status-unknown" id="pipelineStatus">Idle</span>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Last Run:</label>
+                                <div id="lastRun">Never</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Success Rate:</label>
+                                <div id="successRate">0%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Files Section -->
+        <div class="content-section d-none" id="files-section">
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h2>File Manager</h2>
+                    <p class="text-muted">Manage your data files and uploads</p>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="card-title">Data Files</h5>
+                            <button class="btn btn-sm btn-primary" onclick="refreshFiles()">
+                                <i class="fas fa-sync-alt"></i> Refresh
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="filesList">
+                                <!-- Files will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title">Upload Files</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="uploadForm" enctype="multipart/form-data">
+                                <div class="mb-3">
+                                    <input type="file" class="form-control" id="fileInput" multiple>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="fas fa-upload"></i> Upload Files
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h5 class="card-title">Storage Statistics</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-2">
+                                <small class="text-muted">Total Files:</small>
+                                <div id="fileStatsTotal">0</div>
+                            </div>
+                            <div class="mb-2">
+                                <small class="text-muted">Total Size:</small>
+                                <div id="fileStatsSize">0 MB</div>
+                            </div>
+                            <div>
+                                <small class="text-muted">Recent Uploads:</small>
+                                <div id="fileStatsRecent">0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Kafka Section -->
+        <div class="content-section d-none" id="kafka-section">
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h2>Kafka Management</h2>
+                    <p class="text-muted">Monitor and interact with Kafka topics</p>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title">Topics</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="kafkaTopics">
+                                <!-- Topics will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title">Send Message</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="kafkaMessageForm">
+                                <div class="mb-3">
+                                    <label class="form-label">Topic:</label>
+                                    <select class="form-select" id="kafkaTopic" required>
+                                        <option value="">Select a topic</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Message:</label>
+                                    <textarea class="form-control" id="kafkaMessage" rows="4" required></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="fas fa-paper-plane"></i> Send Message
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- MLflow Section -->
+        <div class="content-section d-none" id="mlflow-section">
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h2>MLflow Tracking</h2>
+                    <p class="text-muted">Monitor ML experiments and model runs</p>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title">Experiments</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="mlflowExperiments">
+                                <!-- Experiments will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title">Recent Runs</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="mlflowRuns">
+                                <!-- Runs will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Global variables
+        let socket;
+        let currentSection = 'overview';
+        
+        // Initialize the dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeSocket();
+            initializeNavigation();
+            loadInitialData();
+            
+            // Auto-refresh data every 30 seconds
+            setInterval(refreshData, 30000);
+        });
+        
+        // Socket.IO initialization
+        function initializeSocket() {
+            socket = io();
+            
+            socket.on('connect', function() {
+                console.log('Connected to server');
+            });
+            
+            socket.on('system_update', function(data) {
+                updateDashboard(data);
+            });
+        }
+        
+        // Navigation handling
+        function initializeNavigation() {
+            // Sidebar toggle
+            document.getElementById('sidebarToggle').addEventListener('click', function() {
+                document.getElementById('sidebar').classList.toggle('collapsed');
+            });
+            
+            // Navigation links
+            document.querySelectorAll('.nav-link[data-section]').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const section = this.getAttribute('data-section');
+                    showSection(section);
+                });
+            });
+            
+            // File upload form
+            document.getElementById('uploadForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                uploadFiles();
+            });
+            
+            // Kafka message form
+            document.getElementById('kafkaMessageForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                sendKafkaMessage();
+            });
+        }
+        
+        // Show specific section
+        function showSection(section) {
+            // Update navigation
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            document.querySelector(`[data-section="${section}"]`).classList.add('active');
+            
+            // Update breadcrumb
+            document.getElementById('currentSection').textContent = 
+                section.charAt(0).toUpperCase() + section.slice(1);
+            
+            // Show section content
+            document.querySelectorAll('.content-section').forEach(content => {
+                content.classList.add('d-none');
+            });
+            document.getElementById(`${section}-section`).classList.remove('d-none');
+            
+            currentSection = section;
+            
+            // Load section-specific data
+            if (section === 'files') {
+                refreshFiles();
+            } else if (section === 'kafka') {
+                loadKafkaTopics();
+            } else if (section === 'mlflow') {
+                loadMLflowData();
+            }
+        }
+        
+        // Load initial data
+        function loadInitialData() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => updateDashboard(data))
+                .catch(error => console.error('Error loading initial data:', error));
+        }
+        
+        // Refresh all data
+        function refreshData() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => updateDashboard(data))
+                .catch(error => console.error('Error refreshing data:', error));
+        }
+        
+        // Update dashboard with new data
+        function updateDashboard(data) {
+            // Update system metrics
+            document.getElementById('cpuUsage').textContent = `${data.system.cpu_percent.toFixed(1)}%`;
+            document.getElementById('memoryUsage').textContent = `${data.system.memory_percent.toFixed(1)}%`;
+            document.getElementById('diskUsage').textContent = `${data.system.disk_usage.toFixed(1)}%`;
+            document.getElementById('totalFiles').textContent = data.data_stats.total_files;
+            
+            // Update services
+            updateServicesGrid(data.services);
+            updateDetailedServices(data.services);
+            
+            // Update pipeline status
+            updatePipelineStatus(data.pipeline);
+            
+            // Update system status indicator
+            const healthyServices = Object.values(data.services).filter(s => s.status === 'healthy').length;
+            const totalServices = Object.keys(data.services).length;
+            const systemStatus = document.getElementById('systemStatus');
+            
+            if (healthyServices === totalServices) {
+                systemStatus.className = 'status-indicator status-healthy';
+                systemStatus.textContent = 'System Healthy';
+            } else if (healthyServices > totalServices / 2) {
+                systemStatus.className = 'status-indicator status-running';
+                systemStatus.textContent = 'System Partial';
+            } else {
+                systemStatus.className = 'status-indicator status-unhealthy';
+                systemStatus.textContent = 'System Issues';
+            }
+        }
+        
+        // Update services grid
+        function updateServicesGrid(services) {
+            const grid = document.getElementById('servicesGrid');
+            grid.innerHTML = '';
+            
+            Object.entries(services).forEach(([name, service]) => {
+                const col = document.createElement('div');
+                col.className = 'col-md-4 col-lg-3 mb-3';
+                
+                const statusClass = service.status === 'healthy' ? 'status-healthy' : 
+                                  service.status === 'unhealthy' ? 'status-unhealthy' : 'status-unknown';
+                
+                col.innerHTML = `
+                    <div class="card service-card ${service.status}">
+                        <div class="card-body text-center">
+                            <h6>${name.charAt(0).toUpperCase() + name.slice(1)}</h6>
+                            <span class="status-indicator ${statusClass}">${service.status}</span>
+                            <div class="small text-muted mt-1">${service.description || ''}</div>
+                        </div>
+                    </div>
+                `;
+                
+                grid.appendChild(col);
+            });
+        }
+        
+        // Update detailed services
+        function updateDetailedServices(services) {
+            const container = document.getElementById('detailedServices');
+            container.innerHTML = '';
+            
+            Object.entries(services).forEach(([name, service]) => {
+                const col = document.createElement('div');
+                col.className = 'col-md-6 col-lg-4 mb-4';
+                
+                const statusClass = service.status === 'healthy' ? 'status-healthy' : 
+                                  service.status === 'unhealthy' ? 'status-unhealthy' : 'status-unknown';
+                
+                col.innerHTML = `
+                    <div class="card service-card ${service.status}">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">${name.charAt(0).toUpperCase() + name.slice(1)}</h6>
+                            <span class="status-indicator ${statusClass}">${service.status}</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-2">
+                                <small class="text-muted">Description:</small>
+                                <div>${service.description || 'N/A'}</div>
+                            </div>
+                            <div class="mb-2">
+                                <small class="text-muted">Port:</small>
+                                <div>${service.port || 'N/A'}</div>
+                            </div>
+                            <div class="mb-3">
+                                <small class="text-muted">Last Check:</small>
+                                <div>${service.last_check ? new Date(service.last_check).toLocaleTimeString() : 'Never'}</div>
+                            </div>
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-sm btn-outline-primary" onclick="restartService('${name}')">
+                                    <i class="fas fa-redo"></i> Restart
+                                </button>
+                                ${service.url ? `<a href="${service.url}" target="_blank" class="btn btn-sm btn-outline-info">
+                                    <i class="fas fa-external-link-alt"></i> Open
+                                </a>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(col);
+            });
+        }
+        
+        // Update pipeline status
+        function updatePipelineStatus(pipeline) {
+            const statusElement = document.getElementById('pipelineStatus');
+            if (statusElement) {
+                statusElement.textContent = pipeline.status;
+                statusElement.className = `status-indicator status-${pipeline.status}`;
+            }
+            
+            const lastRunElement = document.getElementById('lastRun');
+            if (lastRunElement) {
+                lastRunElement.textContent = pipeline.last_run ? 
+                    new Date(pipeline.last_run).toLocaleString() : 'Never';
+            }
+            
+            const successRateElement = document.getElementById('successRate');
+            if (successRateElement) {
+                successRateElement.textContent = `${pipeline.success_rate}%`;
+            }
+        }
+        
+        // Restart service
+        function restartService(serviceName) {
+            fetch(`/api/services/${serviceName}/restart`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showNotification('success', data.message);
+                } else {
+                    showNotification('error', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error restarting service:', error);
+                showNotification('error', 'Failed to restart service');
+            });
+        }
+        
+        // Pipeline management functions
+        function triggerPipeline(pipelineType) {
+            fetch(`/api/pipeline/trigger/${pipelineType}`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showNotification('success', data.message);
+                    // Update pipeline step visual
+                    const stepElement = document.getElementById(`step-${pipelineType.replace('_', '-')}`);
+                    if (stepElement) {
+                        stepElement.className = 'pipeline-step-icon active';
+                    }
+                } else {
+                    showNotification('error', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error triggering pipeline:', error);
+                showNotification('error', 'Failed to trigger pipeline');
+            });
+        }
+        
+        function startCompletePipeline() {
+            fetch('/api/pipeline/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ type: 'complete' })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showNotification('success', data.message);
+                } else {
+                    showNotification('error', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error starting pipeline:', error);
+                showNotification('error', 'Failed to start pipeline');
+            });
+        }
+        
+        // File management functions
+        function refreshFiles() {
+            fetch('/api/data/files')
+                .then(response => response.json())
+                .then(data => {
+                    updateFilesList(data.files);
+                    updateFileStats(data);
+                })
+                .catch(error => console.error('Error loading files:', error));
+        }
+        
+        function updateFilesList(files) {
+            const filesList = document.getElementById('filesList');
+            filesList.innerHTML = '';
+            
+            if (files.length === 0) {
+                filesList.innerHTML = '<div class="text-center text-muted py-4">No files found</div>';
+                return;
+            }
+            
+            files.forEach(file => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                
+                const icon = getFileIcon(file.extension);
+                const size = formatFileSize(file.size);
+                
+                fileItem.innerHTML = `
+                    <div class="file-icon">
+                        <i class="${icon}"></i>
+                    </div>
+                    <div class="file-info">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-meta">${file.folder} • ${size} • ${new Date(file.modified).toLocaleDateString()}</div>
+                    </div>
+                    <div class="file-actions">
+                        <button class="btn btn-sm btn-outline-primary" onclick="downloadFile('${file.path}')">
+                            <i class="fas fa-download"></i>
+                        </button>
+                    </div>
+                `;
+                
+                filesList.appendChild(fileItem);
+            });
+        }
+        
+        function updateFileStats(data) {
+            document.getElementById('fileStatsTotal').textContent = data.total_files;
+            document.getElementById('fileStatsSize').textContent = formatFileSize(data.total_size);
+            document.getElementById('fileStatsRecent').textContent = 
+                data.files.filter(f => {
+                    const modDate = new Date(f.modified);
+                    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+                    return modDate > yesterday;
+                }).length;
+        }
+        
+        function uploadFiles() {
+            const formData = new FormData();
+            const fileInput = document.getElementById('fileInput');
+            
+            for (let file of fileInput.files) {
+                formData.append('files', file);
+            }
+            
+            fetch('/api/files/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showNotification('success', 'Files uploaded successfully');
+                    fileInput.value = '';
+                    refreshFiles();
+                } else {
+                    showNotification('error', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error uploading files:', error);
+                showNotification('error', 'Failed to upload files');
+            });
+        }
+        
+        // Kafka functions
+        function loadKafkaTopics() {
+            fetch('/api/kafka/topics')
+                .then(response => response.json())
+                .then(data => {
+                    updateKafkaTopics(data.topics);
+                })
+                .catch(error => console.error('Error loading Kafka topics:', error));
+        }
+        
+        function updateKafkaTopics(topics) {
+            const topicsContainer = document.getElementById('kafkaTopics');
+            const topicSelect = document.getElementById('kafkaTopic');
+            
+            // Update topics list
+            topicsContainer.innerHTML = '';
+            topicSelect.innerHTML = '<option value="">Select a topic</option>';
+            
+            if (topics.length === 0) {
+                topicsContainer.innerHTML = '<div class="text-muted">No topics found</div>';
+                return;
+            }
+            
+            topics.forEach(topic => {
+                const topicItem = document.createElement('div');
+                topicItem.className = 'border-bottom py-2';
+                topicItem.innerHTML = `
+                    <div class="fw-bold">${topic}</div>
+                    <small class="text-muted">Kafka Topic</small>
+                `;
+                topicsContainer.appendChild(topicItem);
+                
+                const option = document.createElement('option');
+                option.value = topic;
+                option.textContent = topic;
+                topicSelect.appendChild(option);
+            });
+        }
+        
+        function sendKafkaMessage() {
+            const topic = document.getElementById('kafkaTopic').value;
+            const message = document.getElementById('kafkaMessage').value;
+            
+            fetch('/api/kafka/send', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ topic, message: JSON.parse(message) })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showNotification('success', 'Message sent successfully');
+                    document.getElementById('kafkaMessage').value = '';
+                } else {
+                    showNotification('error', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error sending Kafka message:', error);
+                showNotification('error', 'Failed to send message');
+            });
+        }
+        
+        // MLflow functions
+        function loadMLflowData() {
+            Promise.all([
+                fetch('/api/mlflow/experiments').then(r => r.json()),
+                fetch('/api/mlflow/runs').then(r => r.json())
+            ])
+            .then(([experiments, runs]) => {
+                updateMLflowExperiments(experiments.experiments);
+                updateMLflowRuns(runs.runs);
+            })
+            .catch(error => console.error('Error loading MLflow data:', error));
+        }
+        
+        function updateMLflowExperiments(experiments) {
+            const container = document.getElementById('mlflowExperiments');
+            container.innerHTML = '';
+            
+            if (experiments.length === 0) {
+                container.innerHTML = '<div class="text-muted">No experiments found</div>';
+                return;
+            }
+            
+            experiments.forEach(exp => {
+                const expItem = document.createElement('div');
+                expItem.className = 'border-bottom py-2';
+                expItem.innerHTML = `
+                    <div class="fw-bold">${exp.name}</div>
+                    <small class="text-muted">ID: ${exp.id} • ${exp.lifecycle_stage}</small>
+                `;
+                container.appendChild(expItem);
+            });
+        }
+        
+        function updateMLflowRuns(runs) {
+            const container = document.getElementById('mlflowRuns');
+            container.innerHTML = '';
+            
+            if (runs.length === 0) {
+                container.innerHTML = '<div class="text-muted">No runs found</div>';
+                return;
+            }
+            
+            runs.forEach(run => {
+                const runItem = document.createElement('div');
+                runItem.className = 'border-bottom py-2';
+                runItem.innerHTML = `
+                    <div class="fw-bold">${run.run_id.substring(0, 8)}...</div>
+                    <small class="text-muted">${run.status} • ${new Date(run.start_time).toLocaleDateString()}</small>
+                `;
+                container.appendChild(runItem);
+            });
+        }
+        
+        // Utility functions
+        function getFileIcon(extension) {
+            const iconMap = {
+                '.csv': 'fas fa-file-csv text-success',
+                '.json': 'fas fa-file-code text-warning',
+                '.txt': 'fas fa-file-alt text-info',
+                '.py': 'fab fa-python text-primary',
+                '.sql': 'fas fa-database text-danger',
+                '.xlsx': 'fas fa-file-excel text-success',
+                '.pdf': 'fas fa-file-pdf text-danger'
+            };
+            return iconMap[extension] || 'fas fa-file text-muted';
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function downloadFile(filePath) {
+            window.open(`/api/files/download/${encodeURIComponent(filePath)}`, '_blank');
+        }
+        
+        function showNotification(type, message) {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `alert alert-${type === 'success' ? 'success' : 'danger'} alert-dismissible fade show position-fixed`;
+            notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            notification.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
