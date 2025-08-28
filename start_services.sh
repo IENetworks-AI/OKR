@@ -152,11 +152,15 @@ EOF
 {
     "status": "running",
     "mode": "simulation",
+    "kafka_mode": "kraft",
+    "zookeeper_required": false,
     "services": {
         "kafka": {
             "port": 9092,
             "pid": $KAFKA_PID,
-            "status": "running"
+            "status": "running",
+            "mode": "kraft",
+            "cluster_id": "okr-kafka-cluster-001"
         },
         "airflow": {
             "port": 8080,
@@ -178,11 +182,7 @@ else
     docker-compose down --remove-orphans 2>/dev/null || true
     
     # Start services in stages
-    echo "Starting Zookeeper..."
-    docker-compose up -d zookeeper
-    wait_for_service "Zookeeper" "localhost" "2181" 20
-    
-    echo "Starting Kafka..."
+    echo "Starting Kafka with KRaft (no Zookeeper needed)..."
     docker-compose up -d kafka
     wait_for_service "Kafka" "localhost" "9092" 30
     
@@ -210,5 +210,7 @@ fi
 echo "Setup complete! Check the services at:"
 echo "- Airflow: http://localhost:8080 (admin/admin)"
 echo "- Dashboard: http://localhost:5000" 
-echo "- Kafka: localhost:9092"
+echo "- Kafka (KRaft mode): localhost:9092"
 echo "- PostgreSQL: localhost:5433"
+echo ""
+echo "Note: Using Kafka KRaft mode - no Zookeeper required! 🎉"

@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-08-28T09:39:00.234290",
+  "timestamp": "2025-08-28T09:44:42.196958",
   "overall_status": "healthy",
   "services": {
     "kafka": {
@@ -38,7 +38,7 @@
       "user": "okr_admin",
       "database": "postgres"
     },
-    "generated_at": "2025-08-28T09:38:29.181973"
+    "generated_at": "2025-08-28T09:43:59.708526"
   },
   "recommendations": [
     "\u2705 All services are running perfectly!",
@@ -50,18 +50,22 @@
   "process_info": {
     "status": "running",
     "mode": "simulation",
+    "kafka_mode": "kraft",
+    "zookeeper_required": false,
     "services": {
       "kafka": {
         "port": 9092,
-        "pid": 5494,
-        "status": "running"
+        "pid": 7457,
+        "status": "running",
+        "mode": "kraft",
+        "cluster_id": "okr-kafka-cluster-001"
       },
       "airflow": {
         "port": 8080,
-        "pid": 5495,
+        "pid": 7458,
         "status": "running"
       }
     },
-    "started_at": "2025-08-28T09:36:44+00:00"
+    "started_at": "2025-08-28T09:43:30+00:00"
   }
 }

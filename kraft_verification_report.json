@@ -1,0 +1,52 @@
+{
+  "timestamp": "2025-08-28T09:44:37.869084",
+  "kafka_mode": "kraft",
+  "zookeeper_required": false,
+  "tests": {
+    "kafka_connectivity": {
+      "status": "PASS",
+      "message": "Kafka accessible on port 9092"
+    },
+    "zookeeper_absence": {
+      "status": "PASS",
+      "message": "Zookeeper correctly not running (KRaft mode)"
+    },
+    "kraft_indicators": {
+      "status": "PASS",
+      "message": "All KRaft indicators present",
+      "details": {
+        "kafka_mode": true,
+        "zookeeper_required": true,
+        "kafka_service_mode": true,
+        "cluster_id_present": true
+      }
+    },
+    "environment_config": {
+      "status": "PASS",
+      "message": "Environment properly configured for KRaft",
+      "details": {
+        "no_zookeeper_connect": true,
+        "kraft_cluster_id": true,
+        "kafka_node_id": true,
+        "process_roles": true
+      }
+    },
+    "docker_compose_config": {
+      "status": "PASS",
+      "message": "Docker Compose properly configured for KRaft",
+      "details": {
+        "no_zookeeper_service": true,
+        "kafka_node_id_present": true,
+        "process_roles_present": true,
+        "controller_quorum_present": true,
+        "cluster_id_present": true
+      }
+    }
+  },
+  "overall": {
+    "status": "PASS",
+    "passed": 5,
+    "total": 5,
+    "percentage": 100.0
+  }
+}

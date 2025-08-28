@@ -62,62 +62,68 @@ services:
       retries: 10
       start_period: 30s
 
-  # Kafka for streaming
+  # Kafka with KRaft (no Zookeeper needed)
   kafka:
     image: confluentinc/cp-kafka:7.4.0
     container_name: okr_kafka
     environment:
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      # KRaft mode configuration
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      
+      # Topic and replication settings for single node
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+      
+      # Auto topic creation and retention
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_LOG_RETENTION_HOURS: 168
       KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
+      
+      # Performance tuning
       KAFKA_HEAP_OPTS: "-Xmx1G -Xms1G"
       KAFKA_JVM_PERFORMANCE_OPTS: "-server -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35 -XX:+ExplicitGCInvokesConcurrent -Djava.awt.headless=true"
+      
+      # KRaft log directory
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_METADATA_LOG_SEGMENT_MS: 15000
+      KAFKA_METADATA_MAX_RETENTION_MS: 86400000
+      
+      # Cluster ID (required for KRaft)
+      CLUSTER_ID: "okr-kafka-cluster-001"
     ports:
       - "9092:9092"
-    depends_on:
-      zookeeper:
-        condition: service_healthy
+      - "9094:9094"
     restart: unless-stopped
     networks:
       - okr_net
     volumes:
       - kafka_data:/var/lib/kafka/data
+    command: >
+      bash -c "
+        # Format the log directory if it doesn't exist
+        if [ ! -f /var/lib/kafka/data/meta.properties ]; then
+          kafka-storage format -t $${CLUSTER_ID} -c /etc/kafka/kafka.properties
+        fi
+        # Start Kafka
+        /etc/confluent/docker/run
+      "
     healthcheck:
       test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 || exit 1"]
       interval: 20s
       timeout: 10s
       retries: 15
       start_period: 120s
-
-  # Zookeeper for Kafka
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.4.0
-    container_name: okr_zookeeper
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-      ZOOKEEPER_INIT_LIMIT: 5
-      ZOOKEEPER_SYNC_LIMIT: 2
-      ZOOKEEPER_MAX_CLIENT_CNXNS: 60
-    ports:
-      - "2181:2181"
-    restart: unless-stopped
-    networks:
-      - okr_net
-    volumes:
-      - zookeeper_data:/var/lib/zookeeper/data
-      - zookeeper_data:/var/lib/zookeeper/log
-    healthcheck:
-      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok"]
-      interval: 20s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
 
   # Airflow Initialization
   airflow-init:
@@ -299,8 +305,6 @@ volumes:
   postgres_data:
     driver: local
   kafka_data:
-    driver: local
-  zookeeper_data:
     driver: local
 
 networks:

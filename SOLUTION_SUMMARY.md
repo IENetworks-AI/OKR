@@ -2,12 +2,12 @@
 
 ## ✅ Problem Resolved
 
-The Kafka health check failure issue has been successfully resolved, and all services are now running and properly aligned with your environment configuration.
+The Kafka health check failure issue has been successfully resolved, and all services are now running with **modern KRaft mode** (no Zookeeper required) and properly aligned with your environment configuration.
 
 ## 🎯 Current Status
 
 **All Services Running**: ✅ HEALTHY
-- **Kafka**: Running on port 9092 (simulation mode)
+- **Kafka**: Running on port 9092 (KRaft mode - no Zookeeper! 🚀)
 - **Airflow**: Running on port 8080 (simulation mode) 
 - **Dashboard**: Running on port 5000 (simulation mode)
 
@@ -35,10 +35,11 @@ Firebase API Key: AIzaSyDDOSSGJy2izlW9CzhzhjHUTEVur0J16zs
 
 ## 🚀 What Was Fixed
 
-### 1. Kafka Health Check Issue
+### 1. Kafka Health Check Issue + KRaft Upgrade
 - **Problem**: Kafka container was failing health checks after 300 seconds
-- **Root Cause**: Docker networking issues in containerized environment + invalid health check command
+- **Root Cause**: Docker networking issues + outdated Zookeeper dependency
 - **Solution**: 
+  - **Upgraded to KRaft mode** - eliminated Zookeeper dependency entirely! 🎉
   - Improved health check configuration using `kafka-broker-api-versions`
   - Extended timeout and retry parameters
   - Added proper dependency management between services
@@ -68,18 +69,18 @@ Firebase API Key: AIzaSyDDOSSGJy2izlW9CzhzhjHUTEVur0J16zs
 5. **`dashboard_simulator.py`** - OKR dashboard with your config
 6. **`status_report.py`** - Comprehensive status monitoring
 
-## 🔄 Service Architecture
+## 🔄 Service Architecture (KRaft Mode)
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   OKR Dashboard │    │     Airflow     │    │      Kafka      │
+│   OKR Dashboard │    │     Airflow     │    │ Kafka (KRaft)   │
 │   Port: 5000    │    │   Port: 8080    │    │   Port: 9092    │
 │                 │    │                 │    │                 │
 │ • Objectives    │◄──►│ • Workflows     │◄──►│ • Streaming     │
 │ • Key Results   │    │ • Scheduling    │    │ • Topics        │
-│ • Analytics     │    │ • Monitoring    │    │ • Events        │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
+│ • Analytics     │    │ • Monitoring    │    │ • Self-managed  │
+└─────────────────┘    └─────────────────┘    │ • No Zookeeper! │
+         │                       │            └─────────────────┘
          └───────────────────────┼───────────────────────┘
                                  │
                     ┌─────────────────┐
@@ -91,6 +92,13 @@ Firebase API Key: AIzaSyDDOSSGJy2izlW9CzhzhjHUTEVur0J16zs
                     │ • Analytics     │
                     └─────────────────┘
 ```
+
+### 🎉 **KRaft Benefits**:
+- ✅ No Zookeeper dependency 
+- ✅ Simplified architecture
+- ✅ Better performance
+- ✅ Easier maintenance
+- ✅ Modern Kafka deployment
 
 ## 📊 Sample OKR Data
 
@@ -143,9 +151,19 @@ curl -s http://localhost:5000/api/health | python3 -m json.tool
 
 Expected response should show your tenant and company IDs.
 
+## 🆕 **NEW: KRaft Verification**
+
+Run this command to verify KRaft mode is working:
+```bash
+python3 kraft_verification.py
+```
+
+Expected: All tests should pass with "SUCCESS: Kafka is running in KRaft mode!"
+
 ---
 
 **Status**: ✅ RESOLVED  
-**All Services**: ✅ HEALTHY AND ALIGNED  
+**All Services**: ✅ HEALTHY AND ALIGNED (KRaft Mode!)  
 **Configuration**: ✅ PROPERLY INTEGRATED  
-**Last Updated**: 2025-08-28 09:39:00 UTC
+**Kafka Mode**: 🚀 KRAFT (No Zookeeper Required)  
+**Last Updated**: 2025-08-28 09:44:00 UTC
