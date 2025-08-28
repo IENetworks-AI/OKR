@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-08-28T09:44:42.196958",
+  "timestamp": "2025-08-28T09:52:33.049366",
   "overall_status": "healthy",
   "services": {
     "kafka": {
@@ -29,6 +29,7 @@
     "email": "surafel@ienetworks.co",
     "firebase_api_key": "AIzaSyDDOSSGJy2izlW9CzhzhjHUTEVur0J16zs",
     "kafka_bootstrap_servers": "localhost:9092",
+    "kafka_ui_url": "http://localhost:8090",
     "airflow_url": "http://localhost:8080",
     "dashboard_url": "http://localhost:5000",
     "database_url": "postgresql://okr_admin:okr_password@localhost:5433/postgres",
@@ -38,7 +39,7 @@
       "user": "okr_admin",
       "database": "postgres"
     },
-    "generated_at": "2025-08-28T09:43:59.708526"
+    "generated_at": "2025-08-28T09:50:18.941644"
   },
   "recommendations": [
     "\u2705 All services are running perfectly!",
@@ -55,17 +56,23 @@
     "services": {
       "kafka": {
         "port": 9092,
-        "pid": 7457,
+        "pid": 9178,
         "status": "running",
         "mode": "kraft",
         "cluster_id": "okr-kafka-cluster-001"
       },
+      "kafka-ui": {
+        "port": 8090,
+        "pid": 9179,
+        "status": "running",
+        "mode": "simulation"
+      },
       "airflow": {
         "port": 8080,
-        "pid": 7458,
+        "pid": 9180,
         "status": "running"
       }
     },
-    "started_at": "2025-08-28T09:43:30+00:00"
+    "started_at": "2025-08-28T09:49:58+00:00"
   }
 }

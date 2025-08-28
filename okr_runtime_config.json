@@ -6,6 +6,7 @@
   "email": "surafel@ienetworks.co",
   "firebase_api_key": "AIzaSyDDOSSGJy2izlW9CzhzhjHUTEVur0J16zs",
   "kafka_bootstrap_servers": "localhost:9092",
+  "kafka_ui_url": "http://localhost:8090",
   "airflow_url": "http://localhost:8080",
   "dashboard_url": "http://localhost:5000",
   "database_url": "postgresql://okr_admin:okr_password@localhost:5433/postgres",
@@ -15,5 +16,5 @@
     "user": "okr_admin",
     "database": "postgres"
   },
-  "generated_at": "2025-08-28T09:43:59.708526"
+  "generated_at": "2025-08-28T09:50:18.941644"
 }

@@ -26,6 +26,7 @@ class OKRConfig:
         
         # Service endpoints
         self.kafka_bootstrap_servers = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
+        self.kafka_ui_url = os.getenv('KAFKA_UI_URL', 'http://localhost:8090')
         self.airflow_url = os.getenv('AIRFLOW_URL', 'http://localhost:8080')
         self.dashboard_url = os.getenv('DASHBOARD_URL', 'http://localhost:5000')
         
@@ -65,6 +66,7 @@ class OKRConfig:
             'email': self.email,
             'firebase_api_key': self.firebase_api_key,
             'kafka_bootstrap_servers': self.kafka_bootstrap_servers,
+            'kafka_ui_url': self.kafka_ui_url,
             'airflow_url': self.airflow_url,
             'dashboard_url': self.dashboard_url,
             'database_url': self.get_database_url(),
@@ -119,6 +121,22 @@ class OKRConfig:
                 'error': str(e)
             }
             
+        # Test Kafka UI
+        try:
+            response = requests.get(f"{self.kafka_ui_url}/actuator/health", timeout=10)
+            results['services']['kafka_ui'] = {
+                'status': 'healthy' if response.status_code == 200 else 'unhealthy',
+                'endpoint': self.kafka_ui_url,
+                'status_code': response.status_code,
+                'response': response.text[:200] if response.text else None
+            }
+        except Exception as e:
+            results['services']['kafka_ui'] = {
+                'status': 'error',
+                'endpoint': self.kafka_ui_url,
+                'error': str(e)
+            }
+
         # Test Dashboard (if available)
         try:
             response = requests.get(f"{self.dashboard_url}/api/health", timeout=10)
@@ -179,6 +197,7 @@ def main():
         
         print(f"\nService Endpoints:")
         print(f"Kafka: {config.kafka_bootstrap_servers}")
+        print(f"Kafka UI: {config.kafka_ui_url}")
         print(f"Airflow: {config.airflow_url}")
         print(f"Dashboard: {config.dashboard_url}")
         print(f"Database: {config.get_database_url()}")

@@ -6,16 +6,22 @@
     "services": {
         "kafka": {
             "port": 9092,
-            "pid": 7457,
+            "pid": 9178,
             "status": "running",
             "mode": "kraft",
             "cluster_id": "okr-kafka-cluster-001"
         },
+        "kafka-ui": {
+            "port": 8090,
+            "pid": 9179,
+            "status": "running",
+            "mode": "simulation"
+        },
         "airflow": {
             "port": 8080,
-            "pid": 7458,
+            "pid": 9180,
             "status": "running"
         }
     },
-    "started_at": "2025-08-28T09:43:30+00:00"
+    "started_at": "2025-08-28T09:49:58+00:00"
 }

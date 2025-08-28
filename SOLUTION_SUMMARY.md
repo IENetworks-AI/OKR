@@ -8,6 +8,7 @@ The Kafka health check failure issue has been successfully resolved, and all ser
 
 **All Services Running**: ✅ HEALTHY
 - **Kafka**: Running on port 9092 (KRaft mode - no Zookeeper! 🚀)
+- **Kafka UI**: Running on port 8090 (visual management interface! 🎯)
 - **Airflow**: Running on port 8080 (simulation mode) 
 - **Dashboard**: Running on port 5000 (simulation mode)
 
@@ -29,6 +30,7 @@ Firebase API Key: AIzaSyDDOSSGJy2izlW9CzhzhjHUTEVur0J16zs
 
 - **OKR Dashboard**: http://localhost:5000
 - **Airflow UI**: http://localhost:8080 (admin/admin)
+- **Kafka UI**: http://localhost:8090 🎯 (visual Kafka management!)
 - **Kafka Service**: localhost:9092
 - **API Health Check**: http://localhost:5000/api/health
 - **OKR Objectives**: http://localhost:5000/api/objectives
@@ -52,11 +54,12 @@ Firebase API Key: AIzaSyDDOSSGJy2izlW9CzhzhjHUTEVur0J16zs
   - Updated Docker Compose to use environment variables
   - Created configuration manager to validate and test all settings
 
-### 3. Service Alignment
-- **Problem**: Kafka and Airflow not properly aligned
+### 3. Service Alignment + Kafka UI Integration
+- **Problem**: Kafka and Airflow not properly aligned + no visual Kafka management
 - **Solution**:
   - Created service orchestration script
   - Added health checks for all services
+  - **Added Kafka UI for visual cluster management** 🎯
   - Implemented proper startup sequence with dependencies
   - Created monitoring and status reporting
 
@@ -67,7 +70,8 @@ Firebase API Key: AIzaSyDDOSSGJy2izlW9CzhzhjHUTEVur0J16zs
 3. **`start_services.sh`** - Service orchestration script
 4. **`okr_config.py`** - Configuration manager and validator
 5. **`dashboard_simulator.py`** - OKR dashboard with your config
-6. **`status_report.py`** - Comprehensive status monitoring
+6. **`kafka_ui_simulator.py`** - Visual Kafka cluster management interface
+7. **`status_report.py`** - Comprehensive status monitoring
 
 ## 🔄 Service Architecture (KRaft Mode)
 
@@ -81,6 +85,15 @@ Firebase API Key: AIzaSyDDOSSGJy2izlW9CzhzhjHUTEVur0J16zs
 │ • Analytics     │    │ • Monitoring    │    │ • Self-managed  │
 └─────────────────┘    └─────────────────┘    │ • No Zookeeper! │
          │                       │            └─────────────────┘
+         │                       │                       ▲
+         │              ┌─────────────────┐              │
+         │              │   Kafka UI      │              │
+         │              │   Port: 8090    │◄─────────────┘
+         │              │                 │               
+         │              │ • Visual Mgmt   │               
+         │              │ • Topic Browser │               
+         │              │ • Cluster Info  │               
+         │              └─────────────────┘               
          └───────────────────────┼───────────────────────┘
                                  │
                     ┌─────────────────┐
@@ -99,6 +112,13 @@ Firebase API Key: AIzaSyDDOSSGJy2izlW9CzhzhjHUTEVur0J16zs
 - ✅ Better performance
 - ✅ Easier maintenance
 - ✅ Modern Kafka deployment
+
+### 🎯 **Kafka UI Features**:
+- ✅ Visual cluster management
+- ✅ Topic browser and message viewer
+- ✅ Broker information display
+- ✅ KRaft mode indication
+- ✅ OKR-specific topic monitoring
 
 ## 📊 Sample OKR Data
 

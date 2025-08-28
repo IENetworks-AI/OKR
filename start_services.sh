@@ -87,6 +87,46 @@ if __name__ == "__main__":
         simulator.stop()
 EOF
 
+    # Create a simple Kafka UI simulator  
+    cat > kafka_ui_simulator.py << 'EOF'
+#!/usr/bin/env python3
+import socket
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class KafkaUIHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/actuator/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"status": "UP", "kafka": "simulation"}')
+        else:
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            self.wfile.write(b'''
+            <html><body>
+            <h1>Kafka UI Simulator</h1>
+            <p>Visual interface for Kafka cluster management</p>
+            <p>Cluster: okr-kafka-cluster (KRaft mode)</p>
+            <p>Topics: okr-objectives, okr-key-results, okr-updates, okr-notifications, okr-analytics</p>
+            <p>Status: Running in simulation mode</p>
+            </body></html>
+            ''')
+    
+    def log_message(self, format, *args):
+        return
+
+if __name__ == "__main__":
+    server = HTTPServer(('0.0.0.0', 8090), KafkaUIHandler)
+    print("Kafka UI Simulator listening on port 8090")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("Stopping Kafka UI simulator...")
+        server.shutdown()
+EOF
+
     # Create a simple Airflow simulator
     cat > airflow_simulator.py << 'EOF'
 #!/usr/bin/env python3
@@ -128,12 +168,16 @@ if __name__ == "__main__":
 EOF
 
     # Make scripts executable
-    chmod +x kafka_simulator.py airflow_simulator.py
+    chmod +x kafka_simulator.py kafka_ui_simulator.py airflow_simulator.py
     
     # Start simulators in background
     echo "Starting Kafka simulator..."
     python3 kafka_simulator.py &
     KAFKA_PID=$!
+    
+    echo "Starting Kafka UI simulator..."
+    python3 kafka_ui_simulator.py &
+    KAFKA_UI_PID=$!
     
     echo "Starting Airflow simulator..."
     python3 airflow_simulator.py &
@@ -141,10 +185,12 @@ EOF
     
     # Wait for services to start
     wait_for_service "Kafka" "localhost" "9092" 10
+    wait_for_service "Kafka UI" "localhost" "8090" 10
     wait_for_service "Airflow" "localhost" "8080" 10
     
     echo "Service simulators started successfully!"
     echo "Kafka simulator PID: $KAFKA_PID"
+    echo "Kafka UI simulator PID: $KAFKA_UI_PID"
     echo "Airflow simulator PID: $AIRFLOW_PID"
     
     # Create status file
@@ -162,6 +208,12 @@ EOF
             "mode": "kraft",
             "cluster_id": "okr-kafka-cluster-001"
         },
+        "kafka-ui": {
+            "port": 8090,
+            "pid": $KAFKA_UI_PID,
+            "status": "running",
+            "mode": "simulation"
+        },
         "airflow": {
             "port": 8080,
             "pid": $AIRFLOW_PID,
@@ -173,7 +225,7 @@ EOF
 EOF
     
     echo "Services are running in simulation mode. Check service_status.json for details."
-    echo "To stop services: kill $KAFKA_PID $AIRFLOW_PID"
+    echo "To stop services: kill $KAFKA_PID $KAFKA_UI_PID $AIRFLOW_PID"
     
 else
     echo "Docker is available. Starting with Docker Compose..."
@@ -200,7 +252,8 @@ else
     wait_for_service "Airflow" "localhost" "8080" 30
     
     echo "Starting additional services..."
-    docker-compose up -d dashboard kafka-consumer
+    docker-compose up -d kafka-ui dashboard kafka-consumer
+    wait_for_service "Kafka UI" "localhost" "8090" 20
     wait_for_service "Dashboard" "localhost" "5000" 20
     
     echo "All services started successfully!"
@@ -210,6 +263,7 @@ fi
 echo "Setup complete! Check the services at:"
 echo "- Airflow: http://localhost:8080 (admin/admin)"
 echo "- Dashboard: http://localhost:5000" 
+echo "- Kafka UI: http://localhost:8090 🎯"
 echo "- Kafka (KRaft mode): localhost:9092"
 echo "- PostgreSQL: localhost:5433"
 echo ""

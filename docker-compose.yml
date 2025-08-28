@@ -125,6 +125,36 @@ services:
       retries: 15
       start_period: 120s
 
+  # Kafka UI for visual management
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: okr_kafka_ui
+    environment:
+      KAFKA_CLUSTERS_0_NAME: okr-kafka-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: okr-connect
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://kafka:8083
+      # Dynamic configuration
+      DYNAMIC_CONFIG_ENABLED: true
+      # Authentication (optional)
+      AUTH_TYPE: DISABLED
+      # UI Configuration
+      SERVER_SERVLET_CONTEXT_PATH: /
+    ports:
+      - "8090:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - okr_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
   # Airflow Initialization
   airflow-init:
     image: apache/airflow:2.7.0-python3.11
