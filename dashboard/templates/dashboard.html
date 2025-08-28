@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OKR Data Pipeline Dashboard</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Plotly -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .dashboard-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+        .metric-card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 1.5rem;
+            transition: transform 0.2s;
+        }
+        .metric-card:hover {
+            transform: translateY(-2px);
+        }
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .metric-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+        }
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        .status-healthy {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status-warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .status-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .chart-container {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 1.5rem;
+        }
+        .service-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            margin-bottom: 0.5rem;
+        }
+        .refresh-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .last-updated {
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+        .table-responsive {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="dashboard-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1 class="mb-0">
+                        <i class="fas fa-chart-line me-3"></i>
+                        OKR Data Pipeline Dashboard
+                    </h1>
+                    <p class="mb-0 mt-2">Real-time monitoring of data pipelines, services, and system health</p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <div class="last-updated">
+                        Last Updated: {{ last_updated }}
+                    </div>
+                    <button class="btn btn-light btn-sm mt-2" onclick="refreshDashboard()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <!-- System Overview -->
+        <div class="row">
+            <!-- System Health Metrics -->
+            <div class="col-lg-3 col-md-6">
+                <div class="metric-card">
+                    <div class="metric-label">CPU Usage</div>
+                    <div class="metric-value">
+                        {{ "%.1f"|format(cache.system_health.cpu_percent or 0) }}%
+                    </div>
+                    <div class="progress mt-2">
+                        <div class="progress-bar" role="progressbar" 
+                             style="width: {{ cache.system_health.cpu_percent or 0 }}%"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3 col-md-6">
+                <div class="metric-card">
+                    <div class="metric-label">Memory Usage</div>
+                    <div class="metric-value">
+                        {{ "%.1f"|format(cache.system_health.memory.percent or 0) }}%
+                    </div>
+                    <div class="progress mt-2">
+                        <div class="progress-bar bg-warning" role="progressbar" 
+                             style="width: {{ cache.system_health.memory.percent or 0 }}%"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3 col-md-6">
+                <div class="metric-card">
+                    <div class="metric-label">Kafka Topics</div>
+                    <div class="metric-value">
+                        {{ cache.kafka_topics.total_topics or 0 }}
+                    </div>
+                    <div class="mt-2">
+                        <i class="fas fa-stream text-info"></i>
+                        <small class="text-muted">Active Topics</small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3 col-md-6">
+                <div class="metric-card">
+                    <div class="metric-label">Database Tables</div>
+                    <div class="metric-value">
+                        {{ cache.data_quality.total_tables or 0 }}
+                    </div>
+                    <div class="mt-2">
+                        <i class="fas fa-database text-success"></i>
+                        <small class="text-muted">Total Tables</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Service Status -->
+        <div class="row">
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <h5><i class="fas fa-server me-2"></i>Service Status</h5>
+                    
+                    {% for service, status in cache.system_health.services.items() %}
+                    <div class="service-status">
+                        <div>
+                            <strong>{{ service.title() }}</strong>
+                        </div>
+                        <div>
+                            {% if status == 'healthy' %}
+                                <span class="status-badge status-healthy">
+                                    <i class="fas fa-check-circle"></i> Healthy
+                                </span>
+                            {% else %}
+                                <span class="status-badge status-error">
+                                    <i class="fas fa-exclamation-circle"></i> Error
+                                </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    
+                    <!-- Docker Containers -->
+                    {% if cache.system_health.containers %}
+                    <h6 class="mt-3">Docker Containers</h6>
+                    {% for container, info in cache.system_health.containers.items() %}
+                    <div class="service-status">
+                        <div>
+                            <strong>{{ container }}</strong>
+                            <br><small class="text-muted">{{ info.image }}</small>
+                        </div>
+                        <div>
+                            {% if info.status == 'running' %}
+                                <span class="status-badge status-healthy">
+                                    <i class="fas fa-play-circle"></i> Running
+                                </span>
+                            {% else %}
+                                <span class="status-badge status-warning">
+                                    <i class="fas fa-pause-circle"></i> {{ info.status.title() }}
+                                </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Pipeline Status Chart -->
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <h5><i class="fas fa-project-diagram me-2"></i>Pipeline Status (24h)</h5>
+                    <div id="pipeline-status-chart" style="height: 300px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="row">
+            <!-- System Metrics Chart -->
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <h5><i class="fas fa-tachometer-alt me-2"></i>System Metrics</h5>
+                    <div id="system-metrics-chart" style="height: 300px;"></div>
+                </div>
+            </div>
+            
+            <!-- Data Counts Chart -->
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <h5><i class="fas fa-chart-bar me-2"></i>Data Counts by Table</h5>
+                    <div id="data-counts-chart" style="height: 300px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Tables -->
+        <div class="row">
+            <!-- Recent Pipeline Executions -->
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <h5><i class="fas fa-history me-2"></i>Recent Pipeline Executions</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>DAG</th>
+                                    <th>Task</th>
+                                    <th>Status</th>
+                                    <th>Time</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for execution in cache.pipeline_status.recent_executions[:10] %}
+                                <tr>
+                                    <td><small>{{ execution.dag_id }}</small></td>
+                                    <td><small>{{ execution.task_id }}</small></td>
+                                    <td>
+                                        {% if execution.status == 'success' %}
+                                            <span class="badge bg-success">{{ execution.status }}</span>
+                                        {% elif execution.status == 'failed' %}
+                                            <span class="badge bg-danger">{{ execution.status }}</span>
+                                        {% else %}
+                                            <span class="badge bg-warning">{{ execution.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td><small>{{ execution.timestamp[:16] if execution.timestamp else 'N/A' }}</small></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Kafka Topics -->
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <h5><i class="fas fa-stream me-2"></i>Kafka Topics</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Topic Name</th>
+                                    <th>Partitions</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for topic, info in cache.kafka_topics.topics.items() %}
+                                <tr>
+                                    <td><small>{{ topic }}</small></td>
+                                    <td><span class="badge bg-info">{{ info.partition_count }}</span></td>
+                                    <td>
+                                        <span class="badge bg-success">{{ info.status }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Refresh Button -->
+    <button class="btn btn-primary refresh-btn" onclick="refreshDashboard()">
+        <i class="fas fa-sync-alt"></i>
+    </button>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Auto-refresh every 30 seconds
+        setInterval(refreshDashboard, 30000);
+        
+        function refreshDashboard() {
+            fetch('/api/refresh')
+                .then(response => response.json())
+                .then(data => {
+                    location.reload();
+                })
+                .catch(error => {
+                    console.error('Error refreshing dashboard:', error);
+                });
+        }
+        
+        // Load charts
+        function loadCharts() {
+            fetch('/api/charts')
+                .then(response => response.json())
+                .then(charts => {
+                    // System metrics chart
+                    if (charts.system_metrics) {
+                        Plotly.newPlot('system-metrics-chart', 
+                                     charts.system_metrics.data, 
+                                     charts.system_metrics.layout,
+                                     {responsive: true});
+                    }
+                    
+                    // Pipeline status chart
+                    if (charts.pipeline_status) {
+                        Plotly.newPlot('pipeline-status-chart', 
+                                     charts.pipeline_status.data, 
+                                     charts.pipeline_status.layout,
+                                     {responsive: true});
+                    }
+                    
+                    // Data counts chart
+                    if (charts.data_counts) {
+                        Plotly.newPlot('data-counts-chart', 
+                                     charts.data_counts.data, 
+                                     charts.data_counts.layout,
+                                     {responsive: true});
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading charts:', error);
+                });
+        }
+        
+        // Load charts on page load
+        document.addEventListener('DOMContentLoaded', loadCharts);
+    </script>
+</body>
+</html>

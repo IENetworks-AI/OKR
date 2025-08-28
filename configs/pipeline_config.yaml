@@ -1,0 +1,111 @@
+# Modern Data Pipeline Configuration
+
+# Database Configuration
+database:
+  postgres:
+    host: postgres
+    port: 5432
+    database: postgres
+    username: okr_admin
+    password: okr_password
+    connection_string: "postgresql://okr_admin:okr_password@postgres:5432/postgres"
+    
+# Kafka Configuration
+kafka:
+  bootstrap_servers: "kafka:9092"
+  topics:
+    plan_tasks: "plan_tasks_topic"
+    csv_data: "csv_data_topic"
+    monitoring: "monitoring_topic"
+    health_check: "health_check_topic"
+  
+  producer:
+    retries: 3
+    retry_backoff_ms: 100
+    batch_size: 16384
+    linger_ms: 10
+    acks: "all"
+    
+  consumer:
+    group_id: "data_pipeline_group"
+    auto_offset_reset: "latest"
+    enable_auto_commit: true
+    auto_commit_interval_ms: 1000
+
+# API Configuration
+api:
+  firebase:
+    login_url: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
+    plan_tasks_url: "https://test-okr-backend.ienetworks.co/api/v1/plan-tasks"
+  
+  retry:
+    max_attempts: 3
+    backoff_seconds: 2
+
+# Data Paths
+data:
+  base_dir: "/opt/airflow/data"
+  raw_dir: "/opt/airflow/data/raw"
+  processed_dir: "/opt/airflow/data/processed"
+  final_dir: "/opt/airflow/data/final"
+  
+  csv_files:
+    - "dailyplans_PMS.csv"
+    - "key_result_selamnew.csv"
+    - "keyresults_PMS.csv"
+    - "milestone_selamnew.csv"
+    - "objective_selamnew.csv"
+    - "objectives_PMS.csv"
+    - "plan_selamnew.csv"
+    - "plan_task_selamnew.csv"
+    - "plans_PMS.csv"
+    - "subtasks_PMS.csv"
+    - "tasks_PMS.csv"
+    - "weeklyplans_PMS.csv"
+
+# Monitoring Configuration
+monitoring:
+  system_health:
+    check_interval_seconds: 30
+    cpu_threshold: 80
+    memory_threshold: 85
+    disk_threshold: 90
+    
+  data_quality:
+    check_interval_seconds: 300
+    min_records_threshold: 1
+    
+  alerts:
+    email_enabled: true
+    email_recipients: ["admin@example.com"]
+    slack_enabled: false
+
+# Dashboard Configuration
+dashboard:
+  host: "0.0.0.0"
+  port: 5000
+  debug: false
+  cache_update_interval: 30
+  
+# Airflow Configuration
+airflow:
+  default_args:
+    owner: "airflow"
+    depends_on_past: false
+    start_date: "2025-01-01"
+    email_on_failure: true
+    email_on_retry: false
+    retries: 2
+    retry_delay_minutes: 5
+    catchup: false
+    
+  dag_schedules:
+    plan_tasks_pipeline: "@hourly"
+    csv_data_pipeline: "@daily"
+    data_monitoring: "@hourly"
+
+# Security Configuration
+security:
+  secret_key: "your-secret-key-change-in-production"
+  allowed_hosts: ["*"]
+  cors_enabled: true
