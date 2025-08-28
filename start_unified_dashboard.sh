@@ -128,7 +128,7 @@ start_docker_services() {
     
     # Start Airflow
     echo -e "${YELLOW}   Starting Airflow...${NC}"
-    docker-compose -f $COMPOSE_FILE up -d airflow-webserver airflow-scheduler airflow-worker
+    docker-compose -f $COMPOSE_FILE up -d airflow-webserver airflow-scheduler
     
     # Start MLflow
     echo -e "${YELLOW}   Starting MLflow...${NC}"
@@ -148,7 +148,7 @@ verify_services() {
     # Wait for key services
     wait_for_service "Dashboard" "http://localhost:$DASHBOARD_PORT/health"
     wait_for_service "MLflow" "http://localhost:$MLFLOW_PORT"
-    wait_for_service "Airflow" "http://localhost:$AIRFLOW_PORT/health"
+    wait_for_service "Airflow" "http://localhost:$AIRFLOW_PORT"
     wait_for_service "Kafka UI" "http://localhost:8080"
     
     echo -e "${GREEN}✅ All services verified${NC}"
