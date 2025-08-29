@@ -7,6 +7,7 @@ and emit records to Kafka for downstream consumers.
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from airflow.models import Variable
 from datetime import datetime
 from datetime import timedelta
 import os
@@ -85,19 +86,19 @@ def fetch_api(**context):
     return f"Fetched API data to {raw_path}"
 
 
-def archive_to_csv(**context):
+def emit_records_to_kafka(**context):
     cfg = _load_config()
-    processed_dir = cfg['data']['processed_directory']
-    ensure_directory(processed_dir)
+    raw_topic = Variable.get("OKR_TOPIC_RAW_INGEST", default_var="okr.raw.ingest")
+    ksm = KafkaStreamManager()
 
     raw_path = context['task_instance'].xcom_pull(task_ids='fetch_api', key='raw_json_path')
     if not raw_path or not os.path.exists(raw_path):
-        raise FileNotFoundError('raw json path not found')
+        return 'No raw JSON to emit'
 
     with open(raw_path, 'r') as f:
         data = json.load(f)
 
-    # Try to normalize common structures
+    # Normalize to list of records
     records = data
     if isinstance(data, dict):
         for key in ['entries', 'results', 'data', 'items']:
@@ -105,37 +106,51 @@ def archive_to_csv(**context):
                 records = data[key]
                 break
 
-    df = pd.json_normalize(records)
-    ts = generate_timestamp()
-    csv_path = os.path.join(processed_dir, f"api_archive_{ts}.csv")
-    df.to_csv(csv_path, index=False)
-    context['task_instance'].xcom_push(key='csv_path', value=csv_path)
-    return f"Archived API data to {csv_path}"
-
-
-def emit_to_kafka(**context):
-    cfg = _load_config()
-    topic = cfg.get('kafka', {}).get('topics', {}).get('okr_data', 'okr_data')
-    ksm = KafkaStreamManager()
-
-    csv_path = context['task_instance'].xcom_pull(task_ids='archive_to_csv', key='csv_path')
-    if not csv_path or not os.path.exists(csv_path):
-        return 'No CSV to emit'
-
-    df = pd.read_csv(csv_path)
+    from uuid import uuid4
+    batch_id = str(uuid4())
     emitted = 0
-    for _, row in df.iterrows():
-        msg = row.to_dict()
-        if ksm.send_message(topic, msg):
+    ts = generate_timestamp()
+
+    for idx, rec in enumerate(records, start=1):
+        payload = {
+            **(rec if isinstance(rec, dict) else {"value": rec}),
+            "_source": "api",
+            "_batch_id": batch_id,
+            "_row_num": idx,
+            "_ingested_ts": ts,
+        }
+        if ksm.send_message(raw_topic, payload):
             emitted += 1
+
     ksm.close()
-    return f"Emitted {emitted} records to Kafka"
+    context['task_instance'].xcom_push(key='batch_id', value=batch_id)
+    context['task_instance'].xcom_push(key='emitted_count', value=emitted)
+    return f"Emitted {emitted} records to Kafka topic '{raw_topic}' with batch_id {batch_id}"
+
+
+def emit_batch_done(**context):
+    done_topic = Variable.get("OKR_TOPIC_RAW_INGEST_DONE", default_var="okr.raw.ingest.done")
+    ksm = KafkaStreamManager()
+    batch_id = context['task_instance'].xcom_pull(task_ids='emit_records_to_kafka', key='batch_id')
+    count = context['task_instance'].xcom_pull(task_ids='emit_records_to_kafka', key='emitted_count') or 0
+    ts = generate_timestamp()
+
+    event = {
+        "event_type": "raw_ingest_done",
+        "batch_id": batch_id,
+        "count": int(count),
+        "source": "api",
+        "ts": ts,
+    }
+    ksm.send_message(done_topic, event)
+    ksm.close()
+    return f"Published batch completion to '{done_topic}' for batch_id {batch_id} with count {count}"
 
 
 with DAG(
     dag_id='api_ingestion_dag',
     default_args=DEFAULT_ARGS,
-    description='Fetch live API data, archive to CSV, and emit to Kafka',
+    description='Fetch live API data and stream to Kafka (with done event)',
     schedule=None,
     catchup=False,
 ) as dag:
@@ -145,15 +160,15 @@ with DAG(
         python_callable=fetch_api,
     )
 
-    t_archive = PythonOperator(
-        task_id='archive_to_csv',
-        python_callable=archive_to_csv,
+    t_emit_records = PythonOperator(
+        task_id='emit_records_to_kafka',
+        python_callable=emit_records_to_kafka,
     )
 
-    t_emit = PythonOperator(
-        task_id='emit_to_kafka',
-        python_callable=emit_to_kafka,
+    t_emit_done = PythonOperator(
+        task_id='emit_batch_done',
+        python_callable=emit_batch_done,
     )
 
-    t_fetch >> t_archive >> t_emit
+    t_fetch >> t_emit_records >> t_emit_done
 

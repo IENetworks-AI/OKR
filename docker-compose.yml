@@ -110,6 +110,71 @@ services:
     networks:
       - okr_net
 
+  # Kafka topic initializer
+  kafka-topic-init:
+    image: bitnami/kafka:3.7.0-debian-12-r2
+    container_name: okr_kafka_topic_init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command: >
+      bash -lc "
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic okr.raw.ingest --partitions 3 --replication-factor 1 &&
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic okr.raw.ingest.done --partitions 3 --replication-factor 1 &&
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic okr.processed.ready --partitions 3 --replication-factor 1 &&
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic okr.deadletter --partitions 3 --replication-factor 1 &&
+        sleep 1
+      "
+    restart: "no"
+    networks:
+      - okr_net
+
+  raw-ingest-consumer:
+    build:
+      context: .
+      dockerfile: kafka_pipeline/consumers/Dockerfile
+    container_name: okr_raw_ingest_consumer
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - OKR_TOPIC_RAW_INGEST=okr.raw.ingest
+      - OKR_TOPIC_DQL=okr.deadletter
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=okr_admin
+      - POSTGRES_PASSWORD=okr_password
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=okr_raw
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - okr_net
+    command: ["python", "/app/consumers/raw_ingest_consumer.py"]
+    restart: always
+
+  airflow-trigger-consumer:
+    build:
+      context: .
+      dockerfile: kafka_pipeline/consumers/Dockerfile
+    container_name: okr_airflow_trigger_consumer
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - OKR_TOPIC_RAW_INGEST_DONE=okr.raw.ingest.done
+      - AIRFLOW_BASE_URL=http://airflow-webserver:8080
+      - AIRFLOW_USER=admin
+      - AIRFLOW_PASSWORD=admin
+      - RAW_TO_PROCESSED_DAG_ID=raw_to_processed_dag
+    depends_on:
+      kafka:
+        condition: service_healthy
+      airflow-webserver:
+        condition: service_healthy
+    networks:
+      - okr_net
+    command: ["python", "/app/consumers/airflow_trigger_consumer.py"]
+    restart: always
+
   # Airflow webserver
   airflow-webserver:
     build:
@@ -156,11 +221,13 @@ services:
       - ./configs:/opt/airflow/configs
       - ./logs:/opt/airflow/logs
       - ./airflow-init.sh:/airflow-init.sh
+      - ./scripts/airflow_bootstrap.sh:/opt/airflow/scripts/airflow_bootstrap.sh
     ports:
       - "8081:8080"
     restart: always
     networks:
       - okr_net
+    entrypoint: ["/bin/bash", "/opt/airflow/scripts/airflow_bootstrap.sh"]
     command: ["airflow", "webserver"]
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
@@ -202,9 +269,11 @@ services:
       - ./data:/opt/airflow/data
       - ./configs:/opt/airflow/configs
       - ./logs:/opt/airflow/logs
+      - ./scripts/airflow_bootstrap.sh:/opt/airflow/scripts/airflow_bootstrap.sh
     restart: always
     networks:
       - okr_net
+    entrypoint: ["/bin/bash", "/opt/airflow/scripts/airflow_bootstrap.sh"]
     command: ["airflow", "scheduler"]
     healthcheck:
       test: ["CMD-SHELL", "airflow jobs check --hostname $(hostname) || exit 1"]
