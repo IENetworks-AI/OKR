@@ -1,0 +1,25 @@
+{
+  "overall_status": "good",
+  "stage_reports": {
+    "raw": {
+      "file": "weeklyplans_PMS.csv",
+      "record_count": 322545,
+      "quality_score": 1.0,
+      "status": "good"
+    },
+    "processed": {
+      "file": "planning_merged.csv",
+      "record_count": 471650,
+      "quality_score": 0.9154484257394254,
+      "status": "good"
+    },
+    "final": {
+      "file": "Planning_final.csv",
+      "record_count": 258823,
+      "quality_score": 1.0,
+      "status": "good"
+    }
+  },
+  "issues": [],
+  "monitoring_timestamp": "2025-08-28T06:00:12.270320"
+}
