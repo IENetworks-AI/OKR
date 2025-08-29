@@ -6,6 +6,9 @@ until airflow db check; do
   sleep 2
 done
 
+echo "[airflow-bootstrap] Upgrading Airflow DB..."
+airflow db upgrade
+
 echo "[airflow-bootstrap] Ensuring admin user exists..."
 airflow users create \
   --username "${_AIRFLOW_WWW_USER_USERNAME:-admin}" \
@@ -34,4 +37,3 @@ airflow connections add pg_okr_curated \
 echo "[airflow-bootstrap] Completed."
 
 exec "$@"
-
