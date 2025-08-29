@@ -126,6 +126,15 @@ Key environment variables:
 - `KAFKA_BOOTSTRAP_SERVERS` (default: kafka:9092)
 - `AIRFLOW_BASE_URL` (default: http://airflow-webserver:8080)
 
+## Event-Driven Ingestion (New)
+
+- Topics: `okr.raw.ingest`, `okr.raw.ingest.done`, `okr.processed.ready`, `okr.deadletter` (auto-created)
+- Airflow Connections: `pg_okr_raw`, `pg_okr_processed`, `pg_okr_curated` auto-created at startup
+- To verify end-to-end:
+  1) `docker compose up -d --build`
+  2) Trigger `api_ingestion_dag` from Airflow UI (or run `./scripts/smoke_ingest.sh`)
+  3) Check Postgres on port 5433: data should appear in `okr_raw.records`, then `okr_processed.records_clean`, then `okr_curated.documents`
+
 ## 🔄 CI/CD
 
 GitHub Actions workflows for:
@@ -269,13 +278,13 @@ FROM public.documents;
 # Monitor ingestion events
 docker exec -it okr_kafka kafka-console-consumer.sh \
   --bootstrap-server localhost:9092 \
-  --topic okr_raw_ingest \
+  --topic okr.raw.ingest \
   --from-beginning
 
 # Monitor processing events
 docker exec -it okr_kafka kafka-console-consumer.sh \
   --bootstrap-server localhost:9092 \
-  --topic okr_processed_updates \
+  --topic okr.processed.ready \
   --from-beginning
 ```
 

@@ -19,6 +19,7 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from utils.helpers import ensure_directory, save_dataframe  # type: ignore
 from data.streaming import KafkaStreamManager  # type: ignore
+from airflow.models import Variable
 
 
 DEFAULT_ARGS = {
@@ -64,61 +65,76 @@ def discover_csv_files(**context):
     return f"Discovered {len(files)} CSV files"
 
 
-def process_and_store(**context):
-    cfg = _load_config()
-    processed_dir = cfg['data']['processed_directory']
-    ensure_directory(processed_dir)
-
+def stream_rows_to_kafka(**context):
+    raw_topic = Variable.get("OKR_TOPIC_RAW_INGEST", default_var="okr.raw.ingest")
     files = context['task_instance'].xcom_pull(task_ids='discover_csv_files', key='csv_files') or []
-    processed_outputs = []
+    ksm = KafkaStreamManager()
+    total = 0
+    batches = []
+
+    from uuid import uuid4
+    from hashlib import sha256
+    from utils.helpers import generate_timestamp
 
     for path in files:
         try:
+            with open(path, 'rb') as fh:
+                digest = sha256(fh.read()).hexdigest()
             df = pd.read_csv(path)
-            # Minimal cleaning: drop duplicates, reset index
-            df = df.drop_duplicates().reset_index(drop=True)
-            base = os.path.splitext(os.path.basename(path))[0]
-            out_path = os.path.join(processed_dir, f"{base}__clean.csv")
-            save_dataframe(df, out_path)
-            processed_outputs.append(out_path)
+            batch_id = str(uuid4())
+            ts = generate_timestamp()
+            for idx, row in df.iterrows():
+                rec = row.to_dict()
+                payload = {
+                    **rec,
+                    "_source": "csv",
+                    "_file_path": path,
+                    "_file_sha256": digest,
+                    "_batch_id": batch_id,
+                    "_row_num": int(idx) + 1,
+                    "_ingested_ts": ts,
+                }
+                if ksm.send_message(raw_topic, payload):
+                    total += 1
+            batches.append({"file_path": path, "sha256": digest, "batch_id": batch_id, "rows": int(df.shape[0])})
         except Exception as exc:
-            processed_outputs.append({'path': path, 'error': str(exc)})
-
-    context['task_instance'].xcom_push(key='processed_outputs', value=processed_outputs)
-    return f"Processed {len([p for p in processed_outputs if isinstance(p, str)])} CSV files"
-
-
-def publish_summaries(**context):
-    cfg = _load_config()
-    topic = cfg.get('kafka', {}).get('topics', {}).get('okr_data', 'okr_data')
-    ksm = KafkaStreamManager()
-    processed_outputs = context['task_instance'].xcom_pull(task_ids='process_and_store', key='processed_outputs') or []
-
-    published = 0
-    for item in processed_outputs:
-        if not isinstance(item, str):
-            continue
-        try:
-            df = pd.read_csv(item)
-            summary = {
-                'file': os.path.basename(item),
-                'rows': int(df.shape[0]),
-                'columns': list(map(str, df.columns)),
-                'ingested_at': context['ts']
-            }
-            if ksm.send_message(topic, summary):
-                published += 1
-        except Exception:
-            continue
+            batches.append({"file_path": path, "error": str(exc)})
 
     ksm.close()
-    return f"Published {published} summaries to Kafka topic '{topic}'"
+    context['task_instance'].xcom_push(key='batches', value=batches)
+    return f"Streamed {total} rows from {len(files)} files to '{raw_topic}'"
+
+
+def emit_done_events(**context):
+    done_topic = Variable.get("OKR_TOPIC_RAW_INGEST_DONE", default_var="okr.raw.ingest.done")
+    ksm = KafkaStreamManager()
+    batches = context['task_instance'].xcom_pull(task_ids='stream_rows_to_kafka', key='batches') or []
+    from utils.helpers import generate_timestamp
+    ts = generate_timestamp()
+    published = 0
+    for b in batches:
+        if 'error' in b:
+            continue
+        event = {
+            "event_type": "raw_ingest_done",
+            "file_id": b.get("batch_id"),
+            "batch_id": b.get("batch_id"),
+            "file_path": b.get("file_path"),
+            "sha256": b.get("sha256"),
+            "rows": b.get("rows", 0),
+            "source": "csv",
+            "ts": ts,
+        }
+        if ksm.send_message(done_topic, event):
+            published += 1
+    ksm.close()
+    return f"Published {published} done events to '{done_topic}'"
 
 
 with DAG(
     dag_id='csv_ingestion_dag',
     default_args=DEFAULT_ARGS,
-    description='Ingest static CSV files and publish summaries to Kafka',
+    description='Stream CSV rows to Kafka and emit done events',
     schedule=None,
     catchup=False,
 ) as dag:
@@ -128,15 +144,15 @@ with DAG(
         python_callable=discover_csv_files,
     )
 
-    t_process = PythonOperator(
-        task_id='process_and_store',
-        python_callable=process_and_store,
+    t_stream = PythonOperator(
+        task_id='stream_rows_to_kafka',
+        python_callable=stream_rows_to_kafka,
     )
 
-    t_publish = PythonOperator(
-        task_id='publish_summaries',
-        python_callable=publish_summaries,
+    t_done = PythonOperator(
+        task_id='emit_done_events',
+        python_callable=emit_done_events,
     )
 
-    t_discover >> t_process >> t_publish
+    t_discover >> t_stream >> t_done
 
