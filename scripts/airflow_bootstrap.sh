@@ -36,4 +36,10 @@ airflow connections add pg_okr_curated \
 
 echo "[airflow-bootstrap] Completed."
 
+# Ensure log directory permissions are correct so Airflow can create dated subdirs
+echo "[airflow-bootstrap] Ensuring /opt/airflow/logs permissions..."
+# Try to set UID 50000 (image's airflow user) and group root (0). Ignore failures.
+chown -R 50000:0 /opt/airflow/logs 2>/dev/null || true
+chmod -R u+rwX,g+rwX,o+rX /opt/airflow/logs 2>/dev/null || true
+
 exec "$@"
