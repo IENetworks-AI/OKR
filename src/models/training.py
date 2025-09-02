@@ -14,8 +14,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
 import logging
 from typing import Tuple, Dict, Any
-import mlflow
-import mlflow.sklearn
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -183,8 +181,7 @@ class ModelTrainer:
             # Save model
             self._save_model(model, "initial_model.pkl")
             
-            # Log to MLflow
-            self._log_model_metrics(model, X_test, y_test, "initial_training")
+            # MLflow logging removed
             
             self.current_model = model
             self.model_version = 1
@@ -248,8 +245,7 @@ class ModelTrainer:
                 # Save updated model
                 self._save_model(updated_model, f"model_v{self.model_version}.pkl")
                 
-                # Log to MLflow
-                self._log_model_metrics(updated_model, new_features, new_target, f"update_v{self.model_version}")
+                # MLflow logging removed
                 
                 return True
             else:
@@ -302,25 +298,7 @@ class ModelTrainer:
         # For now, return empty Series
         return pd.Series()
     
-    def _log_model_metrics(self, model: Any, features: pd.DataFrame, target: pd.Series, run_name: str):
-        """Log model metrics to MLflow"""
-        try:
-            with mlflow.start_run(run_name=run_name):
-                # Log parameters
-                mlflow.log_param("model_type", "RandomForest")
-                mlflow.log_param("n_estimators", 100)
-                mlflow.log_param("max_depth", 10)
-                
-                # Log metrics
-                accuracy = self._evaluate_model(model, features, target)
-                mlflow.log_metric("accuracy", accuracy)
-                
-                # Log model
-                mlflow.sklearn.log_model(model, "model")
-                
-                logger.info(f"Logged metrics to MLflow for run: {run_name}")
-        except Exception as e:
-            logger.warning(f"Could not log to MLflow: {e}")
+    # MLflow helper removed
     
     def load_model(self, model_file: str = None) -> Any:
         """Load a trained model"""

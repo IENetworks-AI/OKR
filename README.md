@@ -1,154 +1,49 @@
-# OKR ML Pipeline with Kafka, Airflow, and MLflow
+## OKR Minimal ETL Stack
 
-A modern machine learning pipeline that automatically updates ML models using streaming data from Kafka, orchestrated by Airflow, with experiment tracking via MLflow.
+Services: Airflow, Kafka, Postgres, Oracle, Redis, Nginx (proxy), Kafka UI.
 
-## 🚀 Quick Start (FIXED & READY!)
+Quick start:
+- Put secrets in `configs/env.vars` (EMAIL, PASSWORD, FIREBASE_API_KEY, TENANT_ID, Kafka vars).
+- Start stack: `bash scripts/start_stack.sh`
+- Trigger ETL: `bash scripts/etl_smoke.sh`
+- Airflow via Nginx: http://localhost (admin/admin)
+- Kafka UI: http://localhost:8085
 
-**All issues have been resolved! The workflow is now fully functional.**
-
-### Start Everything with One Command:
-```bash
-./start-workflow.sh
-```
-
-### Access Points:
-- **Airflow UI**: http://localhost:8081 (admin/admin)
-- **Main API**: http://localhost:80
-- **Kafka UI**: http://localhost:8085  
-- **MLflow**: http://localhost:5000
-
-### Manual Start (if preferred):
-```bash
-# 1. Start databases
-docker compose up -d airflow-db postgres redis
-
-# 2. Start Kafka (wait 60s)
-docker compose up -d kafka
-
-# 3. Start Airflow (wait 30s)
-docker compose up -d airflow-webserver airflow-scheduler
-
-# 4. Start remaining services
-docker compose up -d api nginx kafka-ui mlflow oracle
-```
+Deploy:
+- Use GitHub Actions `deploy.yml` (push to main or manual dispatch). It rsyncs, applies `configs/env.vars`, and runs `docker compose up -d` on the Oracle server.
 
 ---
 
-## 🏗️ Project Structure
-
-```
-OKR/
-├── .github/                    # GitHub Actions workflows
-├── src/                        # Source code
-│   ├── dags/                   # Airflow DAGs
-│   │   ├── etl_pipeline.py     # ETL pipeline DAG
-│   │   ├── model_training.py   # Model training DAG
-│   │   └── monitoring.py       # Monitoring DAG
-│   ├── models/                 # ML model functions
-│   │   ├── training.py         # Model training logic
-│   │   └── evaluation.py       # Model evaluation
-│   ├── data/                   # Data processing functions
-│   │   ├── preprocessing.py    # Data preprocessing
-│   │   └── streaming.py        # Kafka streaming functions
-│   └── utils/                  # Utility functions
-├── data/                       # Data storage
-│   ├── raw/                    # Raw data
-│   ├── processed/              # Processed data
-│   ├── models/                 # Trained models
-│   └── archive/                # Model versions
-├── configs/                    # Configuration files
-├── deploy/                     # Deployment configurations
-├── tests/                      # Test files
-├── scripts/                    # Utility scripts
-├── docker-compose.yml          # Docker services
-└── requirements.txt            # Python dependencies
-```
+## Data locations
+- Raw/processed outputs: `/opt/airflow/output` inside Airflow (mounted from `data/`).
 
 ## 🔧 Services
 
-### Core ML Pipeline
-- **Kafka**: Stream data processing
-- **Airflow**: Workflow orchestration
+### Core
+- **Kafka**: Stream data
+- **Airflow**: Orchestration
 - **PostgreSQL**: Airflow metadata
-- **MLflow**: Experiment tracking
 
-### Data & API
-- **Flask API**: REST API for predictions
-- **Nginx**: Reverse proxy
-- **Oracle**: Database (optional)
+### Reverse Proxy & DB
+- **Nginx**: Reverse proxy to Airflow
+- **Oracle**: Database
 
-## 📊 DAGs
+## DAG
+- `data_pipeline_fetch_process_kafka`: fetch → flatten → optional Kafka send.
 
-### ETL Pipeline
-- Processes raw data
-- Applies transformations
-- Loads to processed storage
+## Environment variables
+- `EMAIL`, `PASSWORD`, `FIREBASE_API_KEY`, `TENANT_ID` in `configs/env.vars`.
+- `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_TOPIC` optional.
 
-### Model Training
-- Trains initial models
-- Incremental model updates
-- Performance evaluation
+## Verify
+1) `bash scripts/start_stack.sh`
+2) `bash scripts/etl_smoke.sh`
 
-### Monitoring
-- ### CSV Ingestion (manual trigger)
-  - Discovers CSVs in `data/raw/*.csv`
-  - Cleans and writes to `data/processed/*__clean.csv`
-  - Publishes file summaries to Kafka topic `okr_data`
+## CI/CD
+- Deployment via GitHub Actions `deploy.yml` to Oracle server.
 
-- ### API Ingestion (manual trigger)
-  - Fetches from configured API in `configs/pipeline_config.json` → `sources.api`
-  - Stores raw JSON to `data/raw` and CSV archive to `data/processed`
-  - Emits records to Kafka topic `okr_data`
-
-Trigger both from the API dashboard or via Airflow UI.
-
-```bash
-# Trigger via API
-curl -X POST http://localhost/api/pipeline/trigger/csv_ingestion_dag
-curl -X POST http://localhost/api/pipeline/trigger/api_ingestion_dag
-
-# Check status
-curl http://localhost/api/pipeline/status
-```
-- Model performance tracking
-- Data quality checks
-- Alert generation
-
-## 🐳 Docker Services
-
-All services are containerized and include:
-- Health checks
-- Proper networking
-- Volume mounts for data persistence
-- Environment-specific configurations
-
-Key environment variables:
-- `KAFKA_BOOTSTRAP_SERVERS` (default: kafka:9092)
-- `AIRFLOW_BASE_URL` (default: http://airflow-webserver:8080)
-
-## Event-Driven Ingestion (New)
-
-- Topics: `okr.raw.ingest`, `okr.raw.ingest.done`, `okr.processed.ready`, `okr.deadletter` (auto-created)
-- Airflow Connections: `pg_okr_raw`, `pg_okr_processed`, `pg_okr_curated` auto-created at startup
-- To verify end-to-end:
-  1) `docker compose up -d --build`
-  2) Trigger `api_ingestion_dag` from Airflow UI (or run `./scripts/smoke_ingest.sh`)
-  3) Check Postgres on port 5433: data should appear in `okr_raw.records`, then `okr_processed.records_clean`, then `okr_curated.documents`
-
-## 🔄 CI/CD
-
-GitHub Actions workflows for:
-- Code quality checks
-- Automated testing
-- Deployment automation
-- Branch protection
-
-## 📈 Monitoring
-
-- Real-time model performance
-- Data pipeline health
-- Resource utilization
-- Error tracking
+## Notes
+- Non-essential components removed; MLflow and API eliminated.
 
 ## 🤝 Contributing
 

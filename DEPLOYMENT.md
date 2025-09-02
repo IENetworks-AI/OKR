@@ -1,27 +1,19 @@
-# Deployment Guide
+## Deployment (Oracle)
 
-This guide explains how to deploy the OKR project to different environments.
+Prereqs:
+- GitHub secrets: ORACLE_SSH_KEY, ORACLE_HOST, ORACLE_USER
+- Provide `configs/env.vars` (EMAIL, PASSWORD, FIREBASE_API_KEY, TENANT_ID, Kafka vars)
 
-## Local Development
+CI/CD:
+- Use the existing GitHub Actions `deploy.yml` to sync the repo, place `configs/env.vars`, and run `docker compose up -d` on the server.
 
-For local development, no additional configuration is required. Simply run:
-
+Verify on server:
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Start the Flask API
-cd api
-python app.py
-
-# Start Kafka (if needed)
-# Follow the setup instructions in scripts/install_kafka.sh
-
-# Start Airflow (if needed)
-# Follow the setup instructions in scripts/setup_airflow.sh
+curl http://localhost/healthz            # Nginx
+docker compose ps                        # All services
 ```
 
-## Oracle Cloud Deployment
+## Manual Deployment
 
 ### Prerequisites
 
@@ -42,7 +34,7 @@ To enable automatic deployment to Oracle Cloud, configure these secrets in your 
 
 **Note**: The current configuration uses a hardcoded Oracle instance IP (`139.185.33.139`) and username (`ubuntu`). For production use, consider making these configurable via secrets.
 
-### How to Generate SSH Key
+### Generate SSH Key
 
 ```bash
 # Generate a new SSH key pair
@@ -55,7 +47,7 @@ ssh-copy-id -i ~/.ssh/id_rsa.pub ubuntu@YOUR_ORACLE_IP
 cat ~/.ssh/id_rsa
 ```
 
-### Deployment Process
+### Process
 
 When you push to the `main` branch, the GitHub Actions workflow will:
 
@@ -64,16 +56,16 @@ When you push to the `main` branch, the GitHub Actions workflow will:
 3. **Install rsync** - Ensure rsync is available on both runner and Oracle server
 4. **Deploy code** - Sync project files to Oracle instance using rsync
 5. **Setup server environment** - Install dependencies, create virtual environment, configure systemd service
-6. **Start services** - Enable and start the ML API service
+6. **Start services** - Start Docker stack (Airflow, Kafka, Postgres, Oracle, Redis, Nginx, Kafka UI)
 
 ### Current Working Configuration
 
 The deployment is currently configured for:
 - **Oracle Instance IP**: `139.185.33.139`
 - **Username**: `ubuntu`
-- **Project Directory**: `/home/ubuntu/ai-project-template`
-- **Service Name**: `mlapi.service`
-- **Port**: `5000`
+- **Project Directory**: `/home/ubuntu/okr-project`
+- **Airflow via Nginx**: `http://<server-ip>/`
+- **Kafka UI**: `http://<server-ip>:8085/`
 
 This configuration has been tested and works successfully in production.
 
@@ -89,19 +81,17 @@ rsync -avz --delete ./ ubuntu@YOUR_ORACLE_IP:~/okr-project/
 ssh ubuntu@YOUR_ORACLE_IP
 cd ~/okr-project
 
-# Run the setup script
-bash scripts/setup_airflow.sh
-bash scripts/nginx_install_and_apply.sh
+# Start Docker services
+docker compose up -d --build
 ```
 
 ## Alternative Deployment Options
 
-### Docker Deployment
+### Local Run
 
 ```bash
-# Build and run with Docker
-docker build -t okr-project .
-docker run -p 8000:8000 okr-project
+bash scripts/start_stack.sh
+bash scripts/etl_smoke.sh
 ```
 
 ### Kubernetes Deployment

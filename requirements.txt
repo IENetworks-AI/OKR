@@ -8,8 +8,7 @@ scipy>=1.9.0
 tensorflow>=2.10.0
 keras>=2.10.0
 
-# MLflow for experiment tracking
-mlflow>=1.30.0
+# (Removed) MLflow for experiment tracking
 
 # Kafka streaming
 kafka-python>=2.0.2

@@ -41,10 +41,10 @@ jobs:
           # Check required files
           required_files=(
             "deploy/oracle-setup.sh"
-            "deploy/mlapi.service"
             "deploy/nginx/mlapi.conf"
             "docker-compose.yml"
             "requirements.txt"
+            "configs/env.vars"
           )
           
           for file in "${required_files[@]}"; do
@@ -167,8 +167,9 @@ jobs:
           # Test services
           echo "Testing deployed services..."
           
-          # Test API (behind nginx, but container port is 5001)
-          curl -f http://localhost:5001/ || echo "API not responding yet"
+          # Test Airflow via Nginx
+          curl -f http://localhost/healthz || echo "Nginx health endpoint not responding yet"
+          curl -f http://localhost || echo "Root page not responding yet"
           
           # Test Docker containers
           docker compose ps
@@ -181,10 +182,12 @@ jobs:
         run: |
           echo "Verifying deployment..."
           
-          # Test API endpoint
+          # Test services via Nginx and Kafka UI
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/oracle.key ubuntu@139.185.33.139 << 'EOF'
-          echo "Testing API endpoint..."
-          curl -f http://localhost:5001/ || echo "API test failed"
+          echo "Testing Nginx health..."
+          curl -f http://localhost/healthz || echo "Nginx health failed"
+          echo "Testing Airflow UI proxied by Nginx (HTTP 200 expected or redirect)"
+          curl -I http://localhost/ | head -n 1 || true
           
           echo "Testing Docker services..."
           docker compose ps

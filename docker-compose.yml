@@ -112,70 +112,7 @@ services:
     networks:
       - okr_net
 
-  # Kafka topic initializer
-  kafka-topic-init:
-    image: bitnami/kafka:3.2.0-debian-11-r20
-    container_name: okr_kafka_topic_init
-    depends_on:
-      kafka:
-        condition: service_healthy
-    command: >
-      bash -lc "
-        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic okr.raw.ingest --partitions 3 --replication-factor 1 &&
-        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic okr.raw.ingest.done --partitions 3 --replication-factor 1 &&
-        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic okr.processed.ready --partitions 3 --replication-factor 1 &&
-        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic okr.deadletter --partitions 3 --replication-factor 1 &&
-        sleep 1
-      "
-    restart: "no"
-    networks:
-      - okr_net
-
-  raw-ingest-consumer:
-    build:
-      context: .
-      dockerfile: kafka_pipeline/consumers/Dockerfile
-    container_name: okr_raw_ingest_consumer
-    environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - OKR_TOPIC_RAW_INGEST=okr.raw.ingest
-      - OKR_TOPIC_DQL=okr.deadletter
-      - POSTGRES_HOST=postgres
-      - POSTGRES_USER=okr_admin
-      - POSTGRES_PASSWORD=okr_password
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=okr_raw
-    depends_on:
-      kafka:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    networks:
-      - okr_net
-    command: ["python", "/app/consumers/raw_ingest_consumer.py"]
-    restart: always
-
-  airflow-trigger-consumer:
-    build:
-      context: .
-      dockerfile: kafka_pipeline/consumers/Dockerfile
-    container_name: okr_airflow_trigger_consumer
-    environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - OKR_TOPIC_RAW_INGEST_DONE=okr.raw.ingest.done
-      - AIRFLOW_BASE_URL=http://airflow-webserver:8080
-      - AIRFLOW_USER=admin
-      - AIRFLOW_PASSWORD=admin
-      - RAW_TO_PROCESSED_DAG_ID=raw_to_processed_dag
-    depends_on:
-      kafka:
-        condition: service_healthy
-      airflow-webserver:
-        condition: service_healthy
-    networks:
-      - okr_net
-    command: ["python", "/app/consumers/airflow_trigger_consumer.py"]
-    restart: always
+  # (Removed) Kafka topic initializer and consumers
 
   # Airflow webserver
   airflow-webserver:
@@ -190,6 +127,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    env_file:
+      - ./configs/env.vars
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
@@ -251,6 +190,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    env_file:
+      - ./configs/env.vars
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
@@ -284,41 +225,7 @@ services:
       retries: 10
       start_period: 120s
 
-  # Flask API
-  api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-    container_name: okr_api
-    working_dir: /app
-    ports:
-      - "5001:5001"
-    volumes:
-      - ./:/app
-      - ./data:/app/data
-    depends_on:
-      kafka:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-      airflow-db:
-        condition: service_healthy
-    restart: always
-    networks:
-      - okr_net
-    environment:
-      - PYTHONPATH=/app:/app/src
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - AIRFLOW_BASE_URL=http://airflow-webserver:8080
-      - AIRFLOW_USER=admin
-      - AIRFLOW_PASSWORD=admin
-    command: ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "2", "--worker-class", "sync", "--timeout", "120", "--keep-alive", "5", "--max-requests", "1000", "--max-requests-jitter", "100", "apps.api.app:app"]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5001/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+  # (Removed) Flask API
 
   # Nginx reverse proxy
   nginx:
@@ -329,7 +236,7 @@ services:
     volumes:
       - ./deploy/nginx/mlapi.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      api:
+      airflow-webserver:
         condition: service_healthy
     restart: always
     networks:
@@ -365,51 +272,13 @@ services:
       retries: 10
       start_period: 120s
 
-  # MLflow tracking server
-  mlflow:
-    image: python:3.11-slim
-    container_name: okr_mlflow
-    ports:
-      - "5000:5000"
-    volumes:
-      - ./:/app
-      - mlflow_data:/mlflow
-      - ./requirements.txt:/requirements.txt
-    working_dir: /app
-    depends_on:
-      airflow-db:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    environment:
-      - MLFLOW_TRACKING_URI=http://0.0.0.0:5000
-      - MLFLOW_BACKEND_STORE_URI=postgresql://airflow:airflow@airflow-db:5432/airflow
-      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow
-      - MLFLOW_SERVE_ARTIFACTS=true
-      - PYTHONPATH=/app:/app/src
-    command: >
-      bash -c "apt-get update && apt-get install -y gcc g++ curl && 
-               pip install --no-cache-dir mlflow==2.8.1 psycopg2-binary==2.9.9 pandas scikit-learn &&
-               mlflow server --host 0.0.0.0 --port 5000 
-               --backend-store-uri postgresql://airflow:airflow@airflow-db:5432/airflow 
-               --default-artifact-root /mlflow 
-               --serve-artifacts"
-    restart: always
-    networks:
-      - okr_net
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5000/api/2.0/mlflow/experiments/list || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 15
-      start_period: 180s
+  # (Removed) MLflow tracking server
 
 volumes:
   airflow_db_data:
   postgres_data:
   kafka_data:
   oracle_data:
-  mlflow_data:
 
 networks:
   okr_net:

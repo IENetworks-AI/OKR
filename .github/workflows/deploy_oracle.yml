@@ -1,0 +1,46 @@
+name: Deploy to Oracle Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.ORACLE_SSH_KEY }}
+
+      - name: Add known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.ORACLE_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Rsync project to server
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude 'logs' \
+            --exclude '.github' \
+            ./ ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }}:~/okr
+
+      - name: Configure env on server
+        run: |
+          ssh ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} "mkdir -p ~/okr/configs && printf '%s\n' '${{ secrets.ENV_FILE_CONTENTS }}' > ~/okr/configs/env.vars"
+
+      - name: Restart stack on server
+        run: |
+          ssh ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} "cd ~/okr && docker compose up -d --build --remove-orphans"
+
+      - name: Verify Airflow is up
+        run: |
+          ssh ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} "docker ps --format '{{.Names}}\t{{.Status}}' | grep okr_airflow_webserver"
+
+
