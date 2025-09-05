@@ -90,18 +90,14 @@ jobs:
             echo "Oracle setup script not found, running basic setup..."
             
             sudo apt-get update
-            sudo apt-get install -y python3 python3-pip python3-venv docker.io docker-compose nginx
-            
-            if [ -f "deploy/mlapi.service" ]; then
-              sudo cp deploy/mlapi.service /etc/systemd/system/
-              sudo systemctl daemon-reload
-              sudo systemctl enable mlapi.service
-            fi
-            
-            if [ -f "deploy/nginx/mlapi.conf" ]; then
-              sudo cp deploy/nginx/mlapi.conf /etc/nginx/sites-available/
-              sudo ln -sf /etc/nginx/sites-available/mlapi.conf /etc/nginx/sites-enabled/
-              sudo nginx -t && sudo systemctl reload nginx
+            sudo apt-get install -y python3 python3-pip python3-venv docker.io docker-compose
+
+            # Ensure Docker starts on boot
+            sudo systemctl enable --now docker
+
+            # Stop and disable host nginx if present to avoid port 80 conflict
+            if systemctl list-unit-files | grep -q '^nginx.service'; then
+              sudo systemctl disable --now nginx || true
             fi
           fi
           
@@ -120,10 +116,15 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/oracle.key ubuntu@${{ secrets.ORACLE_HOST }} << 'EOF'
           echo "Testing deployed services..."
           
-          # Test Airflow UI
+          # Test containerized Nginx routes
+          curl -f http://localhost/ || echo "Root (Streamlit) test failed"
+          curl -f http://localhost/kafka/ || echo "/kafka route test failed"
+          curl -f http://localhost/airflow/ || echo "/airflow route test failed"
+          
+          # Test Airflow web container port mapping
           curl -f http://localhost:8081/health || echo "Airflow UI test failed"
           
-          # Test Kafka UI
+          # Test Kafka UI direct port
           curl -f http://localhost:8085/ || echo "Kafka UI test failed"
           
           # Test Kafka broker
@@ -131,12 +132,6 @@ jobs:
           
           echo "Checking Docker containers status..."
           docker compose ps
-          
-          echo "Testing Nginx configuration..."
-          sudo nginx -t
-          
-          echo "Checking output directories..."
-          ls -la data/scm_output/ data/okr_output/ || echo "Output directories check failed"
           
           echo "Deployment verification completed"
           EOF
