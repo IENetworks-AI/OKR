@@ -192,14 +192,15 @@ services:
       - ./data/plan_tasks_output:/opt/airflow/data/plan_tasks_output
       - ./airflow-init.sh:/airflow-init.sh
       - ./scripts/airflow_bootstrap.sh:/opt/airflow/scripts/airflow_bootstrap.sh
+      - ./scripts/airflow_entrypoint.sh:/opt/airflow/scripts/airflow_entrypoint.sh
     ports:
       - "0.0.0.0:8081:8080"
     restart: always
     networks:
       - okr_net
-    command: ["bash", "-lc", "bash /opt/airflow/scripts/airflow_bootstrap.sh airflow webserver"]
+    command: ["bash", "/opt/airflow/scripts/airflow_entrypoint.sh", "airflow", "webserver"]
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || /home/airflow/.local/bin/airflow jobs check --hostname $(hostname) || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -247,12 +248,13 @@ services:
       - ./logs:/opt/airflow/logs
       - ./data/plan_tasks_output:/opt/airflow/data/plan_tasks_output
       - ./scripts/airflow_bootstrap.sh:/opt/airflow/scripts/airflow_bootstrap.sh
+      - ./scripts/airflow_entrypoint.sh:/opt/airflow/scripts/airflow_entrypoint.sh
     restart: always
     networks:
       - okr_net
-    command: ["bash", "-lc", "bash /opt/airflow/scripts/airflow_bootstrap.sh airflow scheduler"]
+    command: ["bash", "/opt/airflow/scripts/airflow_entrypoint.sh", "airflow", "scheduler"]
     healthcheck:
-      test: ["CMD-SHELL", "airflow jobs check --hostname $(hostname) || exit 1"]
+      test: ["CMD-SHELL", "/home/airflow/.local/bin/airflow jobs check --hostname $(hostname) || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 10
