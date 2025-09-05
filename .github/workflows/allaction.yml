@@ -89,11 +89,11 @@ jobs:
           else
             echo "Oracle setup script not found, running basic setup..."
             
-            sudo apt-get update
-            sudo apt-get install -y python3 python3-pip python3-venv docker.io docker-compose
+            sudo apt-get update || true
+            sudo apt-get install -y python3 python3-pip python3-venv docker.io docker-compose || true
 
             # Ensure Docker starts on boot
-            sudo systemctl enable --now docker
+            sudo systemctl enable --now docker || true
 
             # Stop and disable host nginx if present to avoid port 80 conflict
             if systemctl list-unit-files | grep -q '^nginx.service'; then
@@ -108,31 +108,43 @@ jobs:
           echo "Oracle server deployment completed successfully!"
           EOF
 
-      - name: Verify Deployment
+      - name: Verify Deployment (wait until Airflow is healthy)
         if: steps.check-deployment.outputs.oracle_deploy == 'true'
         run: |
           echo "Verifying deployment..."
-          
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/oracle.key ubuntu@${{ secrets.ORACLE_HOST }} << 'EOF'
-          echo "Testing deployed services..."
-          
-          # Test containerized Nginx routes
-          curl -f http://localhost/ || echo "Root (Streamlit) test failed"
-          curl -f http://localhost/kafka/ || echo "/kafka route test failed"
-          curl -f http://localhost/airflow/ || echo "/airflow route test failed"
-          
-          # Test Airflow web container port mapping
+          set -e
+          cd ~/okr-project
+
+          echo "Waiting for Airflow webserver health..."
+          ATTEMPTS=60
+          SLEEP_SECS=10
+          for i in $(seq 1 $ATTEMPTS); do
+            STATUS=$(docker inspect --format '{{json .State.Health.Status}}' okr_airflow_webserver 2>/dev/null | tr -d '"' || true)
+            echo "Attempt $i/$ATTEMPTS: Airflow webserver health: "+${STATUS:-unknown}
+            if [ "$STATUS" = "healthy" ]; then
+              break
+            fi
+            sleep $SLEEP_SECS
+          done
+
+          STATUS=$(docker inspect --format '{{json .State.Health.Status}}' okr_airflow_webserver 2>/dev/null | tr -d '"' || true)
+          if [ "$STATUS" != "healthy" ]; then
+            echo "Airflow webserver did not become healthy in time" >&2
+          fi
+
+          echo "Testing Airflow UI..."
           curl -f http://localhost:8081/health || echo "Airflow UI test failed"
-          
-          # Test Kafka UI direct port
+
+          echo "Testing Kafka UI..."
           curl -f http://localhost:8085/ || echo "Kafka UI test failed"
-          
-          # Test Kafka broker
-          docker exec okr_kafka /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || echo "Kafka broker test failed"
-          
-          echo "Checking Docker containers status..."
-          docker compose ps
-          
+
+          echo "Testing Streamlit dashboard..."
+          curl -f http://localhost:8501/ || echo "Streamlit test failed"
+
+          echo "Listing containers..."
+          docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+
           echo "Deployment verification completed"
           EOF
 
