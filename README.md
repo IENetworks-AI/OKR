@@ -1,16 +1,60 @@
-## OKR Minimal ETL Stack
+## OKR & SCM Analytics Platform
 
-Services: Airflow, Kafka, Postgres, Oracle, Redis, Nginx (proxy), Kafka UI.
+Comprehensive analytics platform with dual pipelines for OKR (Objectives and Key Results) and SCM (Supply Chain Management) data processing.
 
-Quick start:
-- Put secrets in `configs/env.vars` (EMAIL, PASSWORD, FIREBASE_API_KEY, TENANT_ID, Kafka vars).
-- Start stack: `bash scripts/start_stack.sh`
-- Trigger ETL: `bash scripts/etl_smoke.sh`
-- Airflow via Nginx: http://localhost (admin/admin)
-- Kafka UI: http://localhost:8085
+**Services**: Airflow, Kafka, PostgreSQL, Oracle, Redis, Nginx (proxy), Kafka UI, Streamlit Dashboard Hub.
 
-Deploy:
-- Use GitHub Actions `deploy.yml` (push to main or manual dispatch). It rsyncs, applies `configs/env.vars`, and runs `docker compose up -d` on the Oracle server.
+## 🚀 Quick Start
+
+### Prerequisites
+- Docker and Docker Compose installed
+- Oracle server IP access configured
+- Environment variables configured in `configs/env.vars`
+
+### Launch the Platform
+```bash
+# Option 1: Quick deployment with automated setup
+./deploy-okr-platform.sh
+
+# Option 2: Manual deployment
+docker-compose up -d
+./create_okr_kafka_topics.sh
+```
+
+**Note**: The deployment script will guide you through the complete setup process including environment configuration and service verification.
+
+## 🌐 Service Access Links
+
+### Production Access (Replace `YOUR_ORACLE_SERVER_IP` with actual IP)
+- **📊 Analytics Dashboard Hub**: `http://YOUR_ORACLE_SERVER_IP:8501`
+  - SCM Analytics Dashboard (Supply Chain Management)
+  - OKR Analytics Dashboard (Objectives & Key Results)
+- **🔄 Airflow Web UI**: `http://YOUR_ORACLE_SERVER_IP:8081` (admin/admin)
+- **📈 Kafka UI**: `http://YOUR_ORACLE_SERVER_IP:8085`
+- **🌐 Nginx Proxy**: `http://YOUR_ORACLE_SERVER_IP:80`
+
+### Local Development Access
+- **📊 Analytics Dashboard Hub**: `http://localhost:8501`
+- **🔄 Airflow Web UI**: `http://localhost:8081` (admin/admin)
+- **📈 Kafka UI**: `http://localhost:8085`
+- **🌐 Nginx Proxy**: `http://localhost:80`
+
+### Database Connections
+- **PostgreSQL** (Airflow metadata): `YOUR_ORACLE_SERVER_IP:5433`
+- **Oracle Database** (OKR data): `YOUR_ORACLE_SERVER_IP:1521`
+
+## 🎯 OKR Features
+- **Objectives Tracking**: Monitor organizational objectives across departments
+- **Key Results Analytics**: Track progress on measurable key results
+- **Progress Insights**: Automated trend analysis and velocity tracking
+- **Department Statistics**: Department-wise completion rates and performance
+- **Real-time Dashboards**: Live analytics with Kafka streaming
+
+## 🏭 SCM Features  
+- **Supply Chain Monitoring**: Real-time request and inventory tracking
+- **Performance Metrics**: Operational KPIs and analytics
+- **Kafka Stream Processing**: Live data pipeline monitoring
+- **Historical Analysis**: Trend analysis and reporting
 
 ---
 
@@ -28,19 +72,79 @@ Deploy:
 - **Nginx**: Reverse proxy to Airflow
 - **Oracle**: Database
 
-## DAG
-- `data_pipeline_fetch_process_kafka`: fetch → flatten → optional Kafka send.
+## 📋 Available DAGs
+
+### OKR DAGs
+- **`okr_extract_dag`**: Extracts OKR data from Oracle database (objectives, key results, progress updates)
+- **`okr_transform_dag`**: Processes and transforms OKR data, calculates analytics and insights
+
+### SCM DAGs  
+- **`scm_extract_dag`**: Extracts SCM data from various sources
+- **`scm_transform_dag`**: Processes SCM data for analytics
+- **`data_pipeline_fetch_process_kafka`**: Legacy SCM pipeline (fetch → flatten → Kafka send)
 
 ## Environment variables
 - `EMAIL`, `PASSWORD`, `FIREBASE_API_KEY`, `TENANT_ID` in `configs/env.vars`.
 - `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_TOPIC` optional.
 
-## Verify
-1) `bash scripts/start_stack.sh`
-2) `bash scripts/etl_smoke.sh`
+## ✅ Verification & Testing
+
+### Start the Platform
+```bash
+# Start all services
+docker-compose up -d
+
+# Check service health
+docker-compose ps
+
+# View logs
+docker-compose logs -f [service_name]
+```
+
+### Initialize Data
+```bash
+# Create Kafka topics for OKR
+./create_okr_kafka_topics.sh
+
+# Test SCM pipeline
+bash scripts/etl_smoke.sh
+```
+
+### Access Verification
+1. **Dashboard Hub**: Visit `http://YOUR_SERVER_IP:8501` - should show SCM/OKR dashboard selector
+2. **Airflow**: Visit `http://YOUR_SERVER_IP:8081` - login with admin/admin
+3. **Kafka UI**: Visit `http://YOUR_SERVER_IP:8085` - should show all topics including OKR topics
+4. **DAG Status**: In Airflow, verify both OKR and SCM DAGs are visible and can be triggered
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+1. **Airflow "command not found" error**: 
+   - The Dockerfile has been updated to fix PATH issues
+   - Rebuild containers: `docker-compose build --no-cache`
+
+2. **Oracle connection issues**:
+   - Ensure Oracle container is healthy: `docker-compose ps`
+   - Check Oracle logs: `docker-compose logs okr_oracle`
+   - Verify Oracle instant client installation in Airflow containers
+
+3. **Kafka connection issues**:
+   - Run topic creation script: `./create_okr_kafka_topics.sh`
+   - Check Kafka UI at `http://YOUR_SERVER_IP:8085`
+
+4. **Dashboard not loading**:
+   - Check streamlit logs: `docker-compose logs okr_dashboard_hub`
+   - Ensure all dependencies are installed in the container
+
+### Service Dependencies
+- **Airflow** depends on: PostgreSQL, Kafka, Oracle
+- **Dashboard** depends on: Kafka, Airflow
+- **OKR DAGs** depend on: Oracle database, Kafka topics
 
 ## CI/CD
 - Deployment via GitHub Actions `deploy.yml` to Oracle server.
+- Use the `deploy-okr-platform.sh` script for consistent deployments.
 
 ## Notes
 - Non-essential components removed; MLflow and API eliminated.

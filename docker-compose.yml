@@ -31,7 +31,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./deploy/postgres/init:/docker-entrypoint-initdb.d
     ports:
-      - "5433:5432"
+      - "0.0.0.0:5433:5432"
     restart: always
     networks:
       - okr_net
@@ -75,7 +75,7 @@ services:
       - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
       - ALLOW_PLAINTEXT_LISTENER=yes
     ports:
-      - "9092:9092"
+      - "0.0.0.0:9092:9092"
     volumes:
       - kafka_data:/bitnami/kafka
     restart: always
@@ -98,7 +98,7 @@ services:
     image: provectuslabs/kafka-ui:latest
     container_name: okr_kafka_ui
     ports:
-      - "8085:8080"
+      - "0.0.0.0:8085:8080"
     environment:
       - KAFKA_CLUSTERS_0_NAME=okr
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
@@ -114,10 +114,10 @@ services:
 
   # (Removed) Kafka topic initializer and consumers
 
-  # Streamlit dashboard for SCM
+  # Streamlit dashboard hub (SCM + OKR)
   streamlit:
     image: python:3.11-slim
-    container_name: okr_streamlit
+    container_name: okr_dashboard_hub
     depends_on:
       kafka:
         condition: service_healthy
@@ -130,9 +130,9 @@ services:
     volumes:
       - ./src:/app/src
       - ./configs:/app/configs
-    command: /bin/bash -c "pip install --no-cache-dir streamlit plotly kafka-python python-dotenv pandas && streamlit run src/dashboard/scm_dashboard.py --server.port 8501 --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false"
+    command: /bin/bash -c "pip install --no-cache-dir streamlit plotly kafka-python python-dotenv pandas cx_Oracle && streamlit run src/dashboard/main_dashboard.py --server.port 8501 --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false"
     ports:
-      - "8501:8501"
+      - "0.0.0.0:8501:8501"
     restart: always
     networks:
       - okr_net
@@ -173,6 +173,11 @@ services:
       - POSTGRES_USER=okr_admin
       - POSTGRES_PASSWORD=okr_password
       - POSTGRES_PORT=5432
+      - ORACLE_HOST=oracle
+      - ORACLE_PORT=1521
+      - ORACLE_SERVICE=OKR
+      - ORACLE_USER=okr_user
+      - ORACLE_PASSWORD=okr_password
       - _AIRFLOW_DB_MIGRATE=true
       - _AIRFLOW_WWW_USER_CREATE=true
       - _AIRFLOW_WWW_USER_USERNAME=admin
@@ -187,7 +192,7 @@ services:
       - ./airflow-init.sh:/airflow-init.sh
       - ./scripts/airflow_bootstrap.sh:/opt/airflow/scripts/airflow_bootstrap.sh
     ports:
-      - "8081:8080"
+      - "0.0.0.0:8081:8080"
     restart: always
     networks:
       - okr_net
@@ -227,6 +232,11 @@ services:
       - POSTGRES_USER=okr_admin
       - POSTGRES_PASSWORD=okr_password
       - POSTGRES_PORT=5432
+      - ORACLE_HOST=oracle
+      - ORACLE_PORT=1521
+      - ORACLE_SERVICE=OKR
+      - ORACLE_USER=okr_user
+      - ORACLE_PASSWORD=okr_password
     user: "50000:0"
     volumes:
       - ./src/dags:/opt/airflow/dags
@@ -253,7 +263,7 @@ services:
     image: nginx:1.25-alpine
     container_name: okr_nginx
     ports:
-      - "80:80"
+      - "0.0.0.0:80:80"
     volumes:
       - ./deploy/nginx/mlapi.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
@@ -279,8 +289,8 @@ services:
       - APP_USER=okr_user
       - APP_USER_PASSWORD=okr_password
     ports:
-      - "1521:1521"
-      - "5500:5500"
+      - "0.0.0.0:1521:1521"
+      - "0.0.0.0:5500:5500"
     volumes:
       - oracle_data:/opt/oracle/oradata
     restart: always
