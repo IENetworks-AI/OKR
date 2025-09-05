@@ -49,6 +49,7 @@ else
     exit 1
   fi
   echo "[run_stack] Syncing repo to $REMOTE:$REMOTE_PATH"
+  set +e
   rsync -rltDz \
     --force --delete \
     --omit-dir-times --no-perms --no-owner --no-group \
@@ -58,6 +59,16 @@ else
     --exclude '.venv/' \
     --exclude '**/__pycache__/' \
     "$ROOT_DIR"/ "$REMOTE":"$REMOTE_PATH"/
+  rsync_status=$?
+  set -e
+  if [[ $rsync_status -ne 0 ]]; then
+    if [[ $rsync_status -eq 23 ]]; then
+      echo "[run_stack] WARNING: rsync reported partial transfer (code 23). Continuing..." >&2
+    else
+      echo "[run_stack] ERROR: rsync failed with code $rsync_status" >&2
+      exit $rsync_status
+    fi
+  fi
 
   echo "[run_stack] Placing env vars on remote"
   scp "$ENV_FILE" "$REMOTE":"$REMOTE_PATH"/configs/env.vars
