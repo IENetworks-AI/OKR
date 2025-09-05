@@ -28,7 +28,9 @@ RUN apt-get update \
         vim \
         wget \
         unzip \
+
         netcat-openbsd \
+
     && apt-get autoremove -yqq --purge \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -62,6 +64,7 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r /requirements.txt \
     && pip install --no-cache-dir -r /requirements-scm.txt
 
+
 # Ensure airflow is properly installed and accessible
 RUN pip install --no-cache-dir --force-reinstall apache-airflow[postgres,redis,celery]==2.7.3
 
@@ -77,6 +80,7 @@ RUN mkdir -p /usr/local/bin \
 RUN which airflow || echo "Airflow not in PATH" \
     && ls -la /home/airflow/.local/bin/airflow || echo "Airflow binary not found" \
     && /home/airflow/.local/bin/airflow version || echo "Airflow version check failed"
+
 
 # Set environment variables
 ENV AIRFLOW_HOME=/opt/airflow
