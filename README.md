@@ -122,8 +122,11 @@ bash scripts/etl_smoke.sh
 ### Common Issues
 
 1. **Airflow "command not found" error**: 
-   - The Dockerfile has been updated to fix PATH issues
-   - Rebuild containers: `docker-compose build --no-cache`
+
+   - The Dockerfile and entrypoint scripts have been updated to fix PATH issues
+   - Run the fix script: `./fix-airflow-containers.sh`
+   - Or manually rebuild: `docker compose build --no-cache && docker compose up -d`
+
 
 2. **Oracle connection issues**:
    - Ensure Oracle container is healthy: `docker-compose ps`
