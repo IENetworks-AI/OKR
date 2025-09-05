@@ -58,7 +58,8 @@ jobs:
           echo "Target: ${{ secrets.ORACLE_HOST }}"
           echo "Project: okr-project"
           
-          rsync -avz --delete -e "ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no" \
+          rsync -az --delete \
+            --no-perms --no-owner --no-group \
             --exclude='.git' \
             --exclude='__pycache__' \
             --exclude='*.pyc' \
@@ -67,6 +68,8 @@ jobs:
             --exclude='.github' \
             --exclude='logs' \
             --exclude='.env' \
+            --exclude='data' \
+            -e "ssh -i ~/.ssh/oracle.key -o StrictHostKeyChecking=no" \
             ./ ubuntu@${{ secrets.ORACLE_HOST }}:/home/ubuntu/okr-project/
           
           echo "Code deployment completed"
