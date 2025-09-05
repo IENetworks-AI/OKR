@@ -483,17 +483,19 @@ def combine_and_produce(**kwargs):
 
         # Produce to Kafka
         kafka_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+        topic_requests = os.getenv("SCM_REQUESTS_TOPIC", "scm_requests")
+        topic_inventory = os.getenv("SCM_INVENTORY_TOPIC", "scm_inventory")
         producer = KafkaProducer(bootstrap_servers=kafka_servers.split(','), value_serializer=lambda v: json.dumps(v).encode('utf-8'))
         
         # Stream requests data
         for _, row in combined_requested_df.iterrows():
-            producer.send('scm_requests', row.to_dict())
-        logger.info(f"Streamed {len(combined_requested_df)} request records to Kafka topic 'scm_requests'")
+            producer.send(topic_requests, row.to_dict())
+        logger.info(f"Streamed {len(combined_requested_df)} request records to Kafka topic '{topic_requests}'")
         
         # Stream inventory data
         for _, row in combined_all_df.iterrows():
-            producer.send('scm_inventory', row.to_dict())
-        logger.info(f"Streamed {len(combined_all_df)} inventory records to Kafka topic 'scm_inventory'")
+            producer.send(topic_inventory, row.to_dict())
+        logger.info(f"Streamed {len(combined_all_df)} inventory records to Kafka topic '{topic_inventory}'")
         
         producer.flush()
         logger.info("All data successfully streamed to Kafka topics")

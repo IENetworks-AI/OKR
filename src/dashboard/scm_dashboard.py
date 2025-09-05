@@ -47,7 +47,7 @@ def create_kafka_consumer(topic):
             topic,
             bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS.split(','),
             value_deserializer=lambda x: json.loads(x.decode('utf-8')),
-            auto_offset_reset='latest',  # Start from latest messages
+            auto_offset_reset='earliest',  # Read from earliest to show existing data
             group_id=f'streamlit_{topic}_group_{int(time.time())}',  # Unique group ID
             enable_auto_commit=True,
             consumer_timeout_ms=1000,  # 1 second timeout
