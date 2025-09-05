@@ -1,0 +1,2 @@
+# Additional Python dependencies for SCM-specific Airflow DAGs
+# Keep minimal; extend as needed by DAG imports.
