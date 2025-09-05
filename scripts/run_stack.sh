@@ -49,10 +49,14 @@ else
     exit 1
   fi
   echo "[run_stack] Syncing repo to $REMOTE:$REMOTE_PATH"
-  rsync -az --delete \
-    --exclude '.git' \
-    --exclude 'logs' \
-    --exclude '.venv' \
+  rsync -rltDz \
+    --force --delete \
+    --omit-dir-times --no-perms --no-owner --no-group \
+    --exclude '.git/' \
+    --exclude '.airflow/' \
+    --exclude 'logs/' \
+    --exclude '.venv/' \
+    --exclude '**/__pycache__/' \
     "$ROOT_DIR"/ "$REMOTE":"$REMOTE_PATH"/
 
   echo "[run_stack] Placing env vars on remote"

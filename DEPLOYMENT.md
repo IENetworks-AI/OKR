@@ -74,8 +74,16 @@ This configuration has been tested and works successfully in production.
 If you prefer manual deployment:
 
 ```bash
-# Copy files to Oracle instance
-rsync -avz --delete ./ ubuntu@YOUR_ORACLE_IP:~/okr-project/
+# Copy files to Oracle instance with safe flags
+rsync -rltDz \
+  --force --delete \
+  --omit-dir-times --no-perms --no-owner --no-group \
+  --exclude '.git/' \
+  --exclude '.airflow/' \
+  --exclude 'logs/' \
+  --exclude '.venv/' \
+  --exclude '**/__pycache__/' \
+  ./ ubuntu@YOUR_ORACLE_IP:~/okr-project/
 
 # SSH into instance and run setup
 ssh ubuntu@YOUR_ORACLE_IP
@@ -84,6 +92,10 @@ cd ~/okr-project
 # Start Docker services
 docker compose up -d --build
 ```
+
+Notes:
+- These flags avoid preserving ownership/permissions that can fail on remote hosts and ensure deletions succeed when mirroring.
+- Remove `--delete` if you do not want remote cleanup.
 
 ## Alternative Deployment Options
 
