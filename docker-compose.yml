@@ -114,6 +114,29 @@ services:
 
   # (Removed) Kafka topic initializer and consumers
 
+  # Streamlit dashboard for SCM
+  streamlit:
+    image: python:3.11-slim
+    container_name: okr_streamlit
+    depends_on:
+      kafka:
+        condition: service_healthy
+      airflow-webserver:
+        condition: service_healthy
+    working_dir: /app
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./src:/app/src
+      - ./configs:/app/configs
+    command: /bin/bash -c "pip install --no-cache-dir streamlit plotly kafka-python python-dotenv pandas && streamlit run src/dashboard/scm_dashboard.py --server.port 8501 --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false"
+    ports:
+      - "8501:8501"
+    restart: always
+    networks:
+      - okr_net
+
   # Airflow webserver
   airflow-webserver:
     build:

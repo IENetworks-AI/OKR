@@ -1,22 +1,64 @@
-FROM apache/airflow:2.9.2
+FROM apache/airflow:2.7.3-python3.10
 
-# Switch to root to install packages
+# Switch to root user to install system dependencies
 USER root
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+        default-libmysqlclient-dev \
+        freetds-dev \
+        freetds-bin \
+        libaio1 \
+        libffi-dev \
+        libkrb5-dev \
+        libsasl2-dev \
+        libsasl2-modules \
+        libssl-dev \
+        libxml2-dev \
+        libxmlsec1-dev \
+        libxmlsec1-openssl \
+        libxslt1-dev \
+        libldap2-dev \
+        pkg-config \
+        sasl2-bin \
+        unixodbc-dev \
+        vim \
+    && apt-get autoremove -yqq --purge \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Switch back to airflow user
 USER airflow
 
-# Copy requirements and install Python packages
-COPY requirements.txt /tmp/requirements.txt
+# Copy requirements file
+COPY requirements.txt /requirements.txt
+COPY requirements-scm.txt /requirements-scm.txt
 
-# Install Python packages
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r /requirements.txt \
+    && pip install --no-cache-dir -r /requirements-scm.txt
 
-# Set PYTHONPATH to include src directory
-ENV PYTHONPATH=/opt/airflow/src:/opt/airflow
+# Set environment variables
+ENV AIRFLOW_HOME=/opt/airflow
+ENV AIRFLOW__CORE__EXECUTOR=LocalExecutor
+ENV AIRFLOW__CORE__LOAD_EXAMPLES=False
+ENV AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=True
+ENV AIRFLOW__API__AUTH_BACKEND=airflow.api.auth.backend.basic_auth
+ENV AIRFLOW__CORE__ENABLE_XCOM_PICKLING=True
+
+# Create necessary directories
+RUN mkdir -p /opt/airflow/data/scm_output/final \
+    && mkdir -p /opt/airflow/data/okr_output/final \
+    && mkdir -p /opt/airflow/data/models/scm \
+    && mkdir -p /opt/airflow/data/models/okr \
+    && mkdir -p /opt/airflow/logs
+
+# Set working directory
+WORKDIR /opt/airflow
+
+# Expose port
+EXPOSE 8080

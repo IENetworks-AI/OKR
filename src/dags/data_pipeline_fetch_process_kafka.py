@@ -37,7 +37,7 @@ dag = DAG(
 # ------------------------
 # Output directory (safe inside Airflow container)
 # ------------------------
-BASE_OUTPUT_DIR = "/opt/airflow/output"
+BASE_OUTPUT_DIR = "/opt/airflow/data/okr_output"
 
 # ------------------------
 # Python callables
@@ -64,12 +64,15 @@ def check_env(**kwargs):
         "PASSWORD": "*" * len(os.getenv("PASSWORD", "")),
         "FIREBASE_API_KEY": "*" * len(os.getenv("FIREBASE_API_KEY", "")),
         "TENANT_ID": os.getenv("TENANT_ID"),
+        "COMPANY_ID": os.getenv("COMPANY_ID"),
+        "USER_ID": os.getenv("USER_ID"),
+        "PLANNING_PERIOD_ID": os.getenv("PLANNING_PERIOD_ID"),
         "KAFKA_BOOTSTRAP_SERVERS": os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092"),
         "KAFKA_TOPIC": os.getenv("KAFKA_TOPIC", "plan_tasks_topic")
     }
     for key, value in env_vars.items():
         logger.info(f"{key}: {value if value else 'Not set'}")
-    missing_vars = [var for var in ["EMAIL","PASSWORD","FIREBASE_API_KEY","TENANT_ID"] if not os.getenv(var)]
+    missing_vars = [var for var in ["EMAIL","PASSWORD","FIREBASE_API_KEY","TENANT_ID","COMPANY_ID","USER_ID","PLANNING_PERIOD_ID"] if not os.getenv(var)]
     if missing_vars:
         raise ValueError(f"Missing critical environment variables: {missing_vars}")
 
@@ -80,6 +83,9 @@ def fetch_data(**kwargs):
     PASSWORD = os.getenv("PASSWORD")
     FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY")
     TENANT_ID = os.getenv("TENANT_ID")
+    COMPANY_ID = os.getenv("COMPANY_ID")
+    USER_ID = os.getenv("USER_ID")
+    PLANNING_PERIOD_ID = os.getenv("PLANNING_PERIOD_ID")
 
     firebase_login_url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_API_KEY}"
     plan_tasks_url = "https://test-okr-backend.ienetworks.co/api/v1/plan-tasks"
@@ -93,10 +99,23 @@ def fetch_data(**kwargs):
         return token
 
     id_token = get_firebase_token()
-    headers = {"Authorization": f"Bearer {id_token}", "Content-Type": "application/json", "tenantId": TENANT_ID}
+    headers = {
+        "Authorization": f"Bearer {id_token}", 
+        "Content-Type": "application/json", 
+        "tenantId": TENANT_ID,
+        "companyId": COMPANY_ID,
+        "userId": USER_ID
+    }
+
+    # Add query parameters for the API call
+    params = {
+        "planningPeriodId": PLANNING_PERIOD_ID,
+        "companyId": COMPANY_ID,
+        "userId": USER_ID
+    }
 
     for attempt in range(3):
-        response = requests.get(plan_tasks_url, headers=headers)
+        response = requests.get(plan_tasks_url, headers=headers, params=params)
         if response.status_code == 200:
             break
         elif response.status_code == 401 and attempt < 2:
@@ -104,17 +123,24 @@ def fetch_data(**kwargs):
             headers["Authorization"] = f"Bearer {id_token}"
             time.sleep(2)
         else:
+            logger.error(f"API call failed with status {response.status_code}: {response.text}")
             response.raise_for_status()
 
     tasks = response.json()
+    logger.info(f"Fetched {len(tasks) if isinstance(tasks, list) else 'unknown'} tasks from API")
+    
+    # Ensure output directory exists with proper permissions
     os.makedirs(BASE_OUTPUT_DIR, exist_ok=True)
-    raw_json_path = os.path.join(BASE_OUTPUT_DIR, "plan_tasks_raw.json")
+    os.makedirs(os.path.join(BASE_OUTPUT_DIR, "raw"), exist_ok=True)
+    os.makedirs(os.path.join(BASE_OUTPUT_DIR, "processed"), exist_ok=True)
+    
+    raw_json_path = os.path.join(BASE_OUTPUT_DIR, "raw", "plan_tasks_raw.json")
     with open(raw_json_path, "w", encoding="utf-8") as f:
         json.dump(tasks, f, ensure_ascii=False, indent=4)
 
-    if tasks:
+    if tasks and len(tasks) > 0:
         df = pd.json_normalize(tasks)
-        raw_csv_path = os.path.join(BASE_OUTPUT_DIR, "plan_tasks_raw.csv")
+        raw_csv_path = os.path.join(BASE_OUTPUT_DIR, "raw", "plan_tasks_raw.csv")
         df.to_csv(raw_csv_path, index=False)
         logger.info(f"Saved {len(tasks)} tasks to {raw_json_path} and {raw_csv_path}")
     else:
@@ -122,7 +148,7 @@ def fetch_data(**kwargs):
 
 
 def flatten_data(**kwargs):
-    input_path = os.path.join(BASE_OUTPUT_DIR, "plan_tasks_raw.json")
+    input_path = os.path.join(BASE_OUTPUT_DIR, "raw", "plan_tasks_raw.json")
     if not os.path.exists(input_path):
         logger.warning(f"{input_path} not found, skipping flattening.")
         return
@@ -195,7 +221,7 @@ def flatten_data(**kwargs):
                 })
 
     df = pd.DataFrame(flattened_rows)
-    output_path = os.path.join(BASE_OUTPUT_DIR, "flattened_tasks.csv")
+    output_path = os.path.join(BASE_OUTPUT_DIR, "processed", "flattened_tasks.csv")
     df.to_csv(output_path, index=False, encoding="utf-8")
     logger.info(f"Flattening complete! Saved to {output_path}")
 
@@ -205,7 +231,7 @@ def produce_to_kafka(**kwargs):
     KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
     KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "plan_tasks_topic")
 
-    input_path = os.path.join(BASE_OUTPUT_DIR, "flattened_tasks.csv")
+    input_path = os.path.join(BASE_OUTPUT_DIR, "processed", "flattened_tasks.csv")
     if not os.path.exists(input_path):
         logger.warning(f"{input_path} not found, skipping Kafka production.")
         return

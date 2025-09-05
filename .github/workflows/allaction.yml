@@ -103,11 +103,8 @@ jobs:
           fi
           
           echo "Starting Docker services with latest code..."
-          docker compose down || true
-          docker compose up -d --build
-          
-          echo "Waiting for services to be ready..."
-          sleep 30
+          chmod +x start-docker-services.sh
+          ./start-docker-services.sh
           
           echo "Oracle server deployment completed successfully!"
           EOF
@@ -120,13 +117,23 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/oracle.key ubuntu@${{ secrets.ORACLE_HOST }} << 'EOF'
           echo "Testing deployed services..."
           
-          curl -f http://localhost:5001/ || echo "API test failed"
+          # Test Airflow UI
+          curl -f http://localhost:8081/health || echo "Airflow UI test failed"
+          
+          # Test Kafka UI
+          curl -f http://localhost:8085/ || echo "Kafka UI test failed"
+          
+          # Test Kafka broker
+          docker exec okr_kafka /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || echo "Kafka broker test failed"
           
           echo "Checking Docker containers status..."
           docker compose ps
           
           echo "Testing Nginx configuration..."
           sudo nginx -t
+          
+          echo "Checking output directories..."
+          ls -la data/scm_output/ data/okr_output/ || echo "Output directories check failed"
           
           echo "Deployment verification completed"
           EOF
