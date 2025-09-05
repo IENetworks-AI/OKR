@@ -1,18 +1,16 @@
 #!/bin/bash
 set -e
 
-AIRFLOW_BIN="${AIRFLOW_BIN:-/usr/local/bin/airflow}"
-
 # Run DB migrations if requested
 if [[ "${_AIRFLOW_DB_MIGRATE}" == "true" ]]; then
   echo "Running airflow db upgrade..."
-  "${AIRFLOW_BIN}" db upgrade
+  airflow db upgrade
 fi
 
 # Create admin user if requested
 if [[ "${_AIRFLOW_WWW_USER_CREATE}" == "true" ]]; then
   echo "Creating Airflow admin user..."
-  "${AIRFLOW_BIN}" users create \
+  airflow users create \
     --username "${_AIRFLOW_WWW_USER_USERNAME:-admin}" \
     --password "${_AIRFLOW_WWW_USER_PASSWORD:-admin}" \
     --firstname Admin \
@@ -21,6 +19,11 @@ if [[ "${_AIRFLOW_WWW_USER_CREATE}" == "true" ]]; then
     --email admin@example.com || true
 fi
 
-echo "Starting Airflow: $@"
-exec "$@"
-# Start the Airflow service
+# Execute requested Airflow component via passthrough args
+if [[ "$#" -gt 0 ]]; then
+  echo "Starting Airflow: $@"
+  exec "$@"
+else
+  echo "No Airflow command specified; exiting."
+  exit 1
+fi

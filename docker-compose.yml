@@ -191,8 +191,7 @@ services:
     restart: always
     networks:
       - okr_net
-    entrypoint: ["/bin/bash", "/opt/airflow/scripts/airflow_bootstrap.sh"]
-    command: ["airflow", "webserver"]
+    command: ["bash", "-lc", "/opt/airflow/scripts/airflow_bootstrap.sh airflow webserver"]
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
       interval: 30s
@@ -239,8 +238,7 @@ services:
     restart: always
     networks:
       - okr_net
-    entrypoint: ["/bin/bash", "/opt/airflow/scripts/airflow_bootstrap.sh"]
-    command: ["airflow", "scheduler"]
+    command: ["bash", "-lc", "/opt/airflow/scripts/airflow_bootstrap.sh airflow scheduler"]
     healthcheck:
       test: ["CMD-SHELL", "airflow jobs check --hostname $(hostname) || exit 1"]
       interval: 30s
