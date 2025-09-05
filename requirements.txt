@@ -21,6 +21,7 @@ plotly>=5.0.0
 # Database connectors
 psycopg2-binary>=2.9.0
 sqlalchemy>=1.4.0
+cx_Oracle>=8.3.0
 
 # Utilities
 pyyaml>=6.0
@@ -39,6 +40,7 @@ mypy>=0.991
 # Airflow dependencies
 apache-airflow>=2.9.0
 apache-airflow-providers-postgres>=5.0.0
+apache-airflow-providers-oracle>=3.0.0
 
 # Flask API
 flask>=2.2.0
