@@ -189,6 +189,7 @@ services:
       - ./data:/opt/airflow/data
       - ./configs:/opt/airflow/configs
       - ./logs:/opt/airflow/logs
+      - ./data/plan_tasks_output:/opt/airflow/data/plan_tasks_output
       - ./airflow-init.sh:/airflow-init.sh
       - ./scripts/airflow_bootstrap.sh:/opt/airflow/scripts/airflow_bootstrap.sh
     ports:
@@ -244,6 +245,7 @@ services:
       - ./data:/opt/airflow/data
       - ./configs:/opt/airflow/configs
       - ./logs:/opt/airflow/logs
+      - ./data/plan_tasks_output:/opt/airflow/data/plan_tasks_output
       - ./scripts/airflow_bootstrap.sh:/opt/airflow/scripts/airflow_bootstrap.sh
     restart: always
     networks:

@@ -9,6 +9,7 @@ sys.path.append(os.path.dirname(__file__))
 try:
     from scm_dashboard import main as scm_main
     from okr_dashboard import main as okr_main
+    from plan_tasks_dashboard import main as plan_tasks_main
 except ImportError as e:
     st.error(f"Error importing dashboard modules: {e}")
     st.stop()
@@ -92,6 +93,11 @@ def main():
         st.session_state.selected_dashboard = 'OKR'
         st.rerun()
     
+    # Plan Tasks Dashboard button
+    if st.sidebar.button("📋 Plan Tasks", key="plan_tasks_btn", help="Plan Tasks Analytics"):
+        st.session_state.selected_dashboard = 'PLAN_TASKS'
+        st.rerun()
+    
     st.sidebar.markdown("---")
     
     # Current selection indicator
@@ -108,7 +114,7 @@ def main():
         - Performance metrics
         - Kafka stream analysis
         """)
-    else:
+    elif st.session_state.selected_dashboard == 'OKR':
         st.sidebar.markdown("""
         **OKR Analytics Features:**
         - Objectives tracking
@@ -117,12 +123,23 @@ def main():
         - Department insights
         - Trend analysis
         """)
+    elif st.session_state.selected_dashboard == 'PLAN_TASKS':
+        st.sidebar.markdown("""
+        **Plan Tasks Features:**
+        - Task priority analysis
+        - Weight distribution
+        - Status monitoring
+        - Weekly/daily task breakdown
+        - Real-time task streaming
+        """)
     
     # Main content area
     if st.session_state.selected_dashboard == 'SCM':
         display_scm_dashboard()
     elif st.session_state.selected_dashboard == 'OKR':
         display_okr_dashboard()
+    elif st.session_state.selected_dashboard == 'PLAN_TASKS':
+        display_plan_tasks_dashboard()
 
 def display_scm_dashboard():
     """Display the SCM dashboard"""
@@ -159,6 +176,25 @@ def display_okr_dashboard():
         - Configuration problems
         
         Please check the logs and ensure all services are running properly.
+        """)
+
+def display_plan_tasks_dashboard():
+    """Display the Plan Tasks dashboard"""
+    try:
+        # Clear the main area and run Plan Tasks dashboard
+        plan_tasks_main()
+    except Exception as e:
+        st.error(f"Error loading Plan Tasks dashboard: {e}")
+        st.markdown("""
+        ### Plan Tasks Dashboard Error
+        
+        There was an error loading the Plan Tasks dashboard. This might be due to:
+        - Kafka connection issues
+        - Plan Tasks DAG not running
+        - Missing plan tasks data
+        - Configuration problems
+        
+        Please check the logs and ensure the plan_tasks_pipeline_dag is running properly.
         """)
 
 if __name__ == "__main__":

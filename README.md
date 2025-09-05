@@ -77,6 +77,7 @@ docker-compose up -d
 ### OKR DAGs
 - **`okr_extract_dag`**: Extracts OKR data from Oracle database (objectives, key results, progress updates)
 - **`okr_transform_dag`**: Processes and transforms OKR data, calculates analytics and insights
+- **`plan_tasks_pipeline_dag`**: Fetches plan tasks from OKR backend API, flattens data, and streams to Kafka
 
 ### SCM DAGs  
 - **`scm_extract_dag`**: Extracts SCM data from various sources

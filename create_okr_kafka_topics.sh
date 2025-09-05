@@ -70,6 +70,10 @@ create_topic "scm_requests" 3 1
 create_topic "scm_inventory" 3 1
 create_topic "scm_data_topic" 3 1
 
+# Create plan tasks topic
+echo "Creating plan tasks topic..."
+create_topic "plan_tasks_topic" 3 1
+
 echo "Listing all topics..."
 docker exec $KAFKA_CONTAINER $KAFKA_TOPICS_CMD $KAFKA_CONFIG --list
 
@@ -89,6 +93,7 @@ EXPECTED_OKR_TOPICS=(
     "okr_insights"
     "okr_dashboard_data"
     "okr_alerts"
+    "plan_tasks_topic"
 )
 
 for topic in "${EXPECTED_OKR_TOPICS[@]}"; do
