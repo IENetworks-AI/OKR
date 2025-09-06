@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   # PostgreSQL for Airflow metadata
   airflow-db:
@@ -61,7 +63,6 @@ services:
     container_name: okr_kafka
     hostname: kafka
     environment:
-# KRaft Mode settings
       - KAFKA_KRAFT_MODE=yes
       - KAFKA_CFG_NODE_ID=1
       - KAFKA_CFG_BROKER_ID=1
@@ -112,8 +113,6 @@ services:
     networks:
       - okr_net
 
-  # (Removed) Kafka topic initializer and consumers
-
   # Streamlit dashboard hub (SCM + OKR)
   streamlit:
     image: python:3.11-slim
@@ -137,11 +136,9 @@ services:
     networks:
       - okr_net
 
-  # Airflow webserver
+  # Airflow webserver (official image)
   airflow-webserver:
-    build:
-      context: .
-      dockerfile: airflow.Dockerfile
+    image: apache/airflow:2.9.2
     container_name: okr_airflow_webserver
     depends_on:
       airflow-db:
@@ -158,27 +155,12 @@ services:
       - AIRFLOW__CORE__FERNET_KEY=30e6QztCFtuew7bCiQUZiomQd0eq2eWwHf39LaQyBaU=
       - AIRFLOW__WEBSERVER__SECRET_KEY=supersecret
       - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=true
-      - AIRFLOW__WEBSERVER__RBAC=true
-      - AIRFLOW__WEBSERVER__AUTHENTICATE=true
-      - AIRFLOW__WEBSERVER__AUTH_BACKEND=airflow.auth.backend.basic_auth
-      - AIRFLOW__WEBSERVER__WORKERS=2
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC
       - AIRFLOW__WEBSERVER__HOST=0.0.0.0
       - AIRFLOW__WEBSERVER__PORT=8080
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - PYTHONPATH=/opt/airflow/src:/opt/airflow
-      - POSTGRES_HOST=postgres
-      - POSTGRES_USER=okr_admin
-      - POSTGRES_PASSWORD=okr_password
-      - POSTGRES_PORT=5432
-      - ORACLE_HOST=oracle
-      - ORACLE_PORT=1521
-      - ORACLE_SERVICE=OKR
-      - ORACLE_USER=okr_user
-      - ORACLE_PASSWORD=okr_password
-      - _AIRFLOW_DB_MIGRATE=true
+      - _AIRFLOW_DB_UPGRADE=true
       - _AIRFLOW_WWW_USER_CREATE=true
       - _AIRFLOW_WWW_USER_USERNAME=admin
       - _AIRFLOW_WWW_USER_PASSWORD=admin
@@ -189,28 +171,22 @@ services:
       - ./data:/opt/airflow/data
       - ./configs:/opt/airflow/configs
       - ./logs:/opt/airflow/logs
-      - ./data/plan_tasks_output:/opt/airflow/data/plan_tasks_output
-      - ./airflow-init.sh:/airflow-init.sh
-      - ./scripts/airflow_bootstrap.sh:/opt/airflow/scripts/airflow_bootstrap.sh
-      - ./scripts/airflow_entrypoint.sh:/opt/airflow/scripts/airflow_entrypoint.sh
     ports:
       - "0.0.0.0:8081:8080"
     restart: always
     networks:
       - okr_net
-    command: ["bash", "/opt/airflow/scripts/airflow_entrypoint.sh", "airflow", "webserver"]
+    command: ["airflow", "webserver"]
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || /home/airflow/.local/bin/airflow jobs check --hostname $(hostname) || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 10
       start_period: 120s
 
-  # Airflow scheduler
+  # Airflow scheduler (official image)
   airflow-scheduler:
-    build:
-      context: .
-      dockerfile: airflow.Dockerfile
+    image: apache/airflow:2.9.2
     container_name: okr_airflow_scheduler
     depends_on:
       airflow-db:
@@ -228,17 +204,6 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - PYTHONPATH=/opt/airflow/src:/opt/airflow
-      - POSTGRES_HOST=postgres
-      - POSTGRES_USER=okr_admin
-      - POSTGRES_PASSWORD=okr_password
-      - POSTGRES_PORT=5432
-      - ORACLE_HOST=oracle
-      - ORACLE_PORT=1521
-      - ORACLE_SERVICE=OKR
-      - ORACLE_USER=okr_user
-      - ORACLE_PASSWORD=okr_password
     user: "50000:0"
     volumes:
       - ./src/dags:/opt/airflow/dags
@@ -246,21 +211,16 @@ services:
       - ./data:/opt/airflow/data
       - ./configs:/opt/airflow/configs
       - ./logs:/opt/airflow/logs
-      - ./data/plan_tasks_output:/opt/airflow/data/plan_tasks_output
-      - ./scripts/airflow_bootstrap.sh:/opt/airflow/scripts/airflow_bootstrap.sh
-      - ./scripts/airflow_entrypoint.sh:/opt/airflow/scripts/airflow_entrypoint.sh
     restart: always
     networks:
       - okr_net
-    command: ["bash", "/opt/airflow/scripts/airflow_entrypoint.sh", "airflow", "scheduler"]
+    command: ["airflow", "scheduler"]
     healthcheck:
-      test: ["CMD-SHELL", "/home/airflow/.local/bin/airflow jobs check --hostname $(hostname) || exit 1"]
+      test: ["CMD-SHELL", "airflow jobs check --hostname $(hostname) || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 10
       start_period: 120s
-
-  # (Removed) Flask API
 
   # Nginx reverse proxy
   nginx:
@@ -306,8 +266,6 @@ services:
       timeout: 10s
       retries: 10
       start_period: 120s
-
-  # (Removed) MLflow tracking server
 
 volumes:
   airflow_db_data:
