@@ -10,7 +10,7 @@ from kafka import KafkaProducer
 import json
 import logging
 import os
-import cx_Oracle
+import oracledb as cx_Oracle
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
