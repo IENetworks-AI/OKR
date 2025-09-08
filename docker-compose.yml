@@ -113,7 +113,7 @@ services:
     networks:
       - okr_net
 
-  # Streamlit dashboard hub
+    # Streamlit dashboard hub
   streamlit:
     image: python:3.11-slim
     container_name: okr_dashboard_hub
@@ -130,13 +130,19 @@ services:
       - ./src:/app/src
       - ./configs:/app/configs
     command: >
-      bash -c "pip install --no-cache-dir streamlit plotly kafka-python python-dotenv pandas cx_Oracle &&
+      bash -c "apt-get update && apt-get install -y gcc libaio-dev wget unzip &&
+               wget https://download.oracle.com/otn_software/linux/instantclient/instantclient-basiclite-linuxx64.zip &&
+               unzip instantclient-basiclite-linuxx64.zip -d /opt/oracle &&
+               rm instantclient-basiclite-linuxx64.zip &&
+               export LD_LIBRARY_PATH=/opt/oracle/instantclient_21_13:$LD_LIBRARY_PATH &&
+               pip install --no-cache-dir streamlit plotly kafka-python python-dotenv pandas cx_Oracle &&
                streamlit run src/dashboard/main_dashboard.py --server.port 8501 --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false"
     ports:
       - "8501:8501"
     restart: always
     networks:
       - okr_net
+
 
   # Airflow init
   airflow-init:
